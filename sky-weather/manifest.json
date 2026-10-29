@@ -1,0 +1,26 @@
+{
+  "id": "sky-weather",
+  "name": "Sky Weather",
+  "version": "1.0.0",
+  "description": "A weather display that follows the sky. The backdrop is coloured by the real sun (night, dawn, blue day, golden hour, dusk), the sun and Moon ride their arcs, the Moon shows its true phase and tilt for your location, and clouds, rain, snow, fog and lightning come from the current conditions. Pages for sunrise / sunset, the Moon, hourly and daily forecasts and details, plus a page for every active National Weather Service alert. Reads everything from Home Assistant.",
+  "author": "ant456",
+  "entry_point": "manager.py",
+  "class_name": "SkyWeatherPlugin",
+  "category": "weather",
+  "tags": ["weather", "sun", "moon", "sunrise", "sunset", "alerts", "home-assistant"],
+  "icon": "fas fa-cloud-sun",
+  "display_modes": ["sky_weather"],
+  "update_interval": 60,
+  "default_duration": 45,
+  "config_schema": "config_schema.json",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "released": "2026-10-29",
+      "ledmatrix_min": "2.0.0",
+      "notes": "First release: time-of-day sky with sun and Moon arcs, true Moon phase and tilt for the HA location, weather-driven clouds / rain / snow / fog / lightning, pages for now, sun, moon, hourly, daily and details, NWS alert pages from Home Assistant, test_mode time-lapse demo."
+    }
+  ],
+  "requires": {"python": ">=3.9", "display_size": {"min_width": 128, "min_height": 32}},
+  "license": "GPL-3.0"
+}

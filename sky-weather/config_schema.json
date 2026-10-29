@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "enabled":          { "type": "boolean", "default": true },
+    "display_duration": { "type": "integer", "default": 45, "minimum": 10, "description": "Fallback seconds on the panel; the plugin reports its own length from page_seconds and the alert count" },
+    "ha_url":           { "type": "string",  "default": "http://homeassistant.local:8123", "description": "Home Assistant address" },
+    "ha_token":         { "type": "string",  "description": "HA long-lived access token" },
+    "weather_entity":   { "type": "string",  "default": "weather.openweathermap", "description": "Any HA weather entity (it must support hourly and daily forecasts)" },
+    "alerts_entity":    { "type": "string",  "default": "sensor.nws_alerts_alerts", "description": "NWS Alerts sensor whose Alerts attribute lists the active alerts" },
+    "sun_entity":       { "type": "string",  "default": "sun.sun" },
+    "pages":            { "type": "array", "items": { "type": "string", "enum": ["now", "sun", "moon", "hourly", "daily", "details"] },
+                          "default": ["now", "sun", "moon", "hourly", "daily", "details"], "description": "Pages in order" },
+    "page_seconds":     { "type": "integer", "default": 7, "minimum": 3, "description": "Seconds each page stays up" },
+    "alerts":           { "type": "boolean", "default": true, "description": "Show a page for each active weather alert, first in the rotation, and a warning badge on the Now page" },
+    "alert_seconds":    { "type": "integer", "default": 8, "minimum": 4, "description": "Seconds per alert page" },
+    "max_alerts":       { "type": "integer", "default": 3, "minimum": 1, "maximum": 5 },
+    "interrupt_alerts": { "type": "boolean", "default": false, "description": "Take over the panel when a new alert appears (ha-notifications may already do this through MQTT)" },
+    "hourly_step":      { "type": "integer", "default": 2, "minimum": 1, "maximum": 6, "description": "Hours between the six hourly columns" },
+    "detail_tiles":     { "type": "array", "items": { "type": "string", "enum": ["wind", "humidity", "uv", "rain", "feels", "pressure", "dew", "visibility"] },
+                          "description": "Up to four tiles for the details page (default wind, humidity, uv, rain)" },
+    "poll_seconds":     { "type": "integer", "default": 60, "minimum": 15, "description": "Seconds between polls of current conditions and alerts" },
+    "forecast_seconds": { "type": "integer", "default": 600, "minimum": 120, "description": "Seconds between forecast refreshes" },
+    "latitude":         { "type": "number", "description": "Override Home Assistant's location (sunrise and Moon are computed for this place)" },
+    "longitude":        { "type": "number" },
+    "timezone":         { "type": "string", "description": "Override Home Assistant's time zone, e.g. America/New_York" },
+    "test_mode":        { "type": "boolean", "default": false, "description": "Play a made-up day: a time-lapse of the sky with a storm, then every page and two alerts. Turn off afterwards." }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "sky-weather": {
+    "enabled": true,
+    "display_duration": 45,
+    "ha_url": "http://homeassistant.local:8123",
+    "ha_token": "YOUR-TOKEN-HERE",
+    "weather_entity": "weather.openweathermap",
+    "alerts_entity": "sensor.nws_alerts_alerts",
+    "page_seconds": 7,
+    "alerts": true,
+    "interrupt_alerts": false
+  }
+}
