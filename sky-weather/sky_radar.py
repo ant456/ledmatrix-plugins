@@ -231,6 +231,8 @@ class RadarFetcher:
         self._frame_index = 0
         self._last_frame_advance = 0.0
         self._loops_completed = 0
+        self._smooth_t0 = 0.0                                # added for Sky Weather: smooth playback clock
+        self._smooth_cache: Dict[Tuple, Image.Image] = {}    # finished map+radar composites, one per frame
         self._panel_size: Optional[Tuple[int, int]] = None
         self._font = None
 
@@ -538,6 +540,7 @@ class RadarFetcher:
         self._loops_completed = 0
         self._frame_index = 0
         self._last_frame_advance = time.time()
+        self._smooth_t0 = time.time()
 
     def _advance_frame(self, num_frames: int) -> int:
         now = time.time()
@@ -606,6 +609,58 @@ class RadarFetcher:
 
         return self._compose(background, frame_image, frame, frames, width,
                              height, viewport)
+
+    # ---- smooth playback (added for Sky Weather) ----------------------------
+
+    def _smooth_composite(self, background: Image.Image, frame: RadarFrame, frame_image: Image.Image,
+                          width: int, height: int) -> Image.Image:
+        """Map + one radar frame at panel size, without the label; built once and remembered."""
+        key = (frame.ts, frame.is_nowcast, id(frame_image), id(background), width, height)
+        got = self._smooth_cache.get(key)
+        if got is None:
+            if len(self._smooth_cache) > 40:                 # frames came and went: start the memory afresh
+                self._smooth_cache.clear()
+            composite = Image.alpha_composite(background.convert("RGBA"), frame_image)
+            got = composite.convert("RGB").resize((width, height), Image.Resampling.LANCZOS)
+            self._smooth_cache[key] = got
+        return got
+
+    def get_smooth_image(self, width: int, height: int) -> Optional[Image.Image]:
+        """Like get_radar_image, but the rain moves: it crossfades between neighbouring frames.
+
+        Each of the n frames takes ``frame_seconds`` to melt into the next, then the newest is held for
+        ``loop_pause_seconds``. Called at the display's frame rate this looks like video rather than a slideshow.
+        The label and progress dots are drawn on top, crisp, for whichever frame is nearer.
+        """
+        viewport = self._ensure_viewport(width, height)
+        background = self._get_background(viewport)
+        frames = self._playback_frames()
+        if len(frames) < 2:
+            return self.get_radar_image(width, height)
+        images = [f.image for f in frames]                    # one read each; refresh_data may drop one meanwhile
+        if any(im is None or im.size != background.size for im in images):
+            return self.get_radar_image(width, height)         # viewport changed mid-render: the plain path copes
+        now = time.time()
+        if self._smooth_t0 == 0.0:
+            self._smooth_t0 = now
+        n = len(frames)
+        sweep = (n - 1) * self.frame_seconds
+        t = (now - self._smooth_t0) % (sweep + self.loop_pause_seconds)
+        if t >= sweep:
+            i, f = n - 1, 0.0
+        else:
+            x = t / self.frame_seconds
+            i = int(x)
+            f = x - i
+        a = self._smooth_composite(background, frames[i], images[i], width, height)
+        if f <= 0.0:
+            img = a.copy()
+        else:
+            b = self._smooth_composite(background, frames[i + 1], images[i + 1], width, height)
+            img = Image.blend(a, b, f)
+        nearest = i + 1 if f >= 0.5 else i
+        self._frame_index = nearest
+        return self._add_overlay(img, frames[nearest], frames, width, height, viewport)
 
     def _compose(self, background: Image.Image, frame_image: Image.Image,
                  frame: RadarFrame, frames: List[RadarFrame], width: int,

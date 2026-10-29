@@ -117,6 +117,7 @@ class SkyWeatherPlugin(BasePlugin):
             "past_frames": int(min(12, max(2, _num(c.get("radar_past_frames"), 6)))),
             "frame_seconds": min(2.0, max(0.1, _num(c.get("radar_frame_seconds"), 0.5))),
             "loop_pause_seconds": min(5.0, max(0.0, _num(c.get("radar_loop_pause_seconds"), 1.5))),
+            "smooth": bool(c.get("radar_smooth", True)),
             "line_color": _rgb(c.get("radar_line_color"), (0, 130, 70)),
             "fill_color": _rgb(c.get("radar_fill_color"), (15, 25, 15)),
         }
@@ -347,7 +348,8 @@ class SkyWeatherPlugin(BasePlugin):
             if self._prev_page != "radar":
                 self._radar.reset_loop()                      # always start the loop on its first frame
             self._prev_page = name
-            frame = self._radar.get_radar_image(self.W, self.H)
+            get = self._radar.get_smooth_image if self.radar_cfg["smooth"] else self._radar.get_radar_image
+            frame = get(self.W, self.H)
             if frame is not None:
                 return self._fit(frame.convert("RGB"))
             name = "now"

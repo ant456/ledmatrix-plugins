@@ -33,6 +33,7 @@
     "radar_map_brightness": { "type": "number", "default": 0.5, "minimum": 0.1, "maximum": 1.0, "description": "Dim the map so the radar stands out" },
     "radar_show_nowcast": { "type": "boolean", "default": false, "description": "Append RainViewer short-term forecast frames to the loop" },
     "radar_past_frames":{ "type": "integer", "default": 6, "minimum": 2, "maximum": 12 },
+    "radar_smooth":     { "type": "boolean", "default": true, "description": "Crossfade between radar frames so the rain moves like video; off steps through the frames one by one" },
     "radar_frame_seconds": { "type": "number", "default": 0.5, "description": "Seconds per radar frame" },
     "radar_loop_pause_seconds": { "type": "number", "default": 1.5, "description": "Pause on the newest frame before the loop restarts" },
     "radar_line_color": { "type": "array", "items": { "type": "integer" }, "default": [0, 130, 70], "description": "Vector map style only" },

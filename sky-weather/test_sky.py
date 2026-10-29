@@ -339,7 +339,7 @@ class FakeRadar:
     """Stands in for sky_radar.RadarFetcher: no network, a fixed loop."""
 
     def __init__(self, frames=6):
-        self.frames, self.resets, self.draws, self.refreshes = frames, 0, 0, 0
+        self.frames, self.resets, self.draws, self.smooth_draws, self.refreshes = frames, 0, 0, 0, 0
 
     def _playback_frames(self):
         return [object()] * self.frames
@@ -352,6 +352,10 @@ class FakeRadar:
 
     def get_radar_image(self, w, h):
         self.draws += 1
+        return __import__("PIL.Image", fromlist=["Image"]).new("RGB", (w, h), (0, 60, 0))
+
+    def get_smooth_image(self, w, h):
+        self.smooth_draws += 1
         return __import__("PIL.Image", fromlist=["Image"]).new("RGB", (w, h), (0, 60, 0))
 
     def needs_refresh(self, interval):
@@ -432,3 +436,73 @@ def test_radar_refresh_uses_panel_size_and_waits_for_a_location():
     nowhere._place = {}
     nowhere._update_radar()                                                      # no location yet: quietly nothing
     assert nowhere._radar is None
+
+
+# ── smooth radar playback ────────────────────────────────────────────────────
+
+def _smooth_fetcher(monkeypatch, frames=3):
+    import sky_radar
+    from PIL import Image
+    f = sky_radar.RadarFetcher(LAT, LON, 75, None, map_style="vector", frame_seconds=1.0, loop_pause_seconds=2.0)
+    size = f._get_background(f._ensure_viewport(128, 32)).size
+    colors = [(255, 0, 0, 255), (0, 0, 255, 255), (0, 255, 0, 255), (255, 255, 0, 255)]
+    f._frames = {i + 1: sky_radar.RadarFrame(i + 1, "p", False, Image.new("RGBA", size, colors[i])) for i in range(frames)}
+    clock = {"t": 100.0}
+    monkeypatch.setattr(sky_radar.time, "time", lambda: clock["t"])
+    f._smooth_t0 = 100.0
+    return f, clock
+
+
+def _px(f):
+    return f.get_smooth_image(128, 32).getpixel((120, 2))                       # clear of the label, crosshair and dots
+
+
+def test_smooth_radar_melts_one_frame_into_the_next(monkeypatch):
+    f, clock = _smooth_fetcher(monkeypatch)
+    assert _px(f) == (255, 0, 0)                                                 # t=0: the oldest frame, untouched
+    clock["t"] = 100.5
+    r, g, b = _px(f)
+    assert abs(r - 128) <= 2 and g == 0 and abs(b - 128) <= 2                    # halfway red -> blue
+    clock["t"] = 101.5
+    r, g, b = _px(f)
+    assert r == 0 and abs(g - 128) <= 2 and abs(b - 128) <= 2                    # halfway blue -> green
+    clock["t"] = 101.25
+    assert _px(f)[2] > 150                                                       # a quarter in is still mostly blue
+
+
+def test_smooth_radar_holds_the_newest_frame_then_loops(monkeypatch):
+    f, clock = _smooth_fetcher(monkeypatch)
+    for t in (102.0, 102.5, 103.9):                                              # sweep is 2 s, then a 2 s hold
+        clock["t"] = t
+        assert _px(f) == (0, 255, 0)
+    clock["t"] = 104.0
+    assert _px(f) == (255, 0, 0)                                                 # and round again
+    clock["t"] = 150.0
+    f.reset_loop()
+    assert _px(f) == (255, 0, 0)                                                 # a page entry restarts from the first frame
+
+
+def test_smooth_radar_label_stays_crisp_and_one_frame_falls_back(monkeypatch):
+    f, clock = _smooth_fetcher(monkeypatch)
+    clock["t"] = 100.5
+    img = f.get_smooth_image(128, 32)
+    assert img.size == (128, 32) and img.getbbox() is not None
+    f._frames = dict(list(f._frames.items())[:1])                                # a single frame cannot be blended
+    assert f.get_smooth_image(128, 32).size == (128, 32)
+    f._frames = {}
+    assert f.get_smooth_image(128, 32).size == (128, 32)                         # nothing loaded: just the map
+
+
+def test_smooth_is_the_default_and_can_be_switched_off():
+    assert radar_plugin().radar_cfg["smooth"] is True
+    p = radar_plugin(radar_smooth=False)
+    p._radar = FakeRadar()
+    now = datetime(2026, 10, 29, 20, 0, tzinfo=UTC).timestamp()
+    p._t0 = now
+    p.compose(now + 8)
+    assert p._radar.draws == 1 and p._radar.smooth_draws == 0
+    q = radar_plugin()
+    q._radar = FakeRadar()
+    q._t0 = now
+    q.compose(now + 8)
+    assert q._radar.smooth_draws == 1
