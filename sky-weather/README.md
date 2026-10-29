@@ -44,6 +44,7 @@ Pages take turns every `page_seconds`. Active weather alerts get their own pages
 | `now` | The live sky: temperature, today's high and low, what it feels like, the condition, and the sun or Moon where they really are. A pulsing warning triangle appears in the corner while an alert is active |
 | `sun` | Today's sun arc with a dotted path, sunrise and sunset times, a countdown to the next one, daylight length, and GOLDEN HOUR when it is |
 | `moon` | A big Moon with its real phase, tilt and maria, phase name, percent lit, day of the cycle, next moonrise or moonset, and the next new, quarter or full Moon |
+| `radar` | Animated precipitation radar: the last hour of RainViewer frames over a dimmed map, centred on your location, with a timestamp. Shows once its frames have loaded and stays up for two loops |
 | `hourly` | Six columns, each tinted with the sky colour of that hour, with an icon, temperature and chance of rain |
 | `daily` | Five days with icon, high, low and chance of rain |
 | `details` | Four tiles: wind (with a direction arrow), humidity, UV, chance of rain. `feels`, `pressure`, `dew` and `visibility` are available too |
@@ -80,4 +81,6 @@ Active alerts come from the Home Assistant `nws_alerts` integration (the sensor'
 
 `test_mode: true` plays a made-up day: a 30-second time-lapse of the sky (clear dawn, clouds, a thunderstorm, a golden sunset, the Moon coming up), then every page and two alerts. Turn it off afterwards. Display mode: `sky_weather`.
 
-Files: `manager.py` (plugin and polling thread), `sky_data.py` (Home Assistant calls and parsing), `sky_astro.py` (sun, Moon and phase maths), `sky_render.py` (the sky and every page), `sky_draw.py` / `sky_font.py` (drawing kit), `bdf_face.py` (BDF fonts). Tests: `test_sky.py`.
+**Radar.** The radar page uses the radar code from the Weather Display plugin of the [LEDMatrix project](https://github.com/ChuckBuilds/ledmatrix-plugins) (GPL-3.0, Copyright (C) 2025 LEDMatrix Team), copied into `sky_radar.py` and `sky_maptiles.py` with only names changed. Frames come from RainViewer and the map from CARTO (no keys needed). It downloads in its own thread, caches tiles, and only joins the rotation once it has frames, so a slow connection never delays the weather. Turn it off with `"radar": false`; tune it with the `radar_*` settings (range in miles, map style, brightness, frame speed, nowcast frames).
+
+Files: `manager.py` (plugin and polling thread), `sky_data.py` (Home Assistant calls and parsing), `sky_astro.py` (sun, Moon and phase maths), `sky_render.py` (the sky and every page), `sky_radar.py` / `sky_maptiles.py` (radar, from the Weather Display plugin), `data/us-states.geojson` (vector map fallback), `sky_draw.py` / `sky_font.py` (drawing kit), `bdf_face.py` (BDF fonts). Tests: `test_sky.py`.

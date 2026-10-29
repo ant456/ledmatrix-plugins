@@ -331,3 +331,104 @@ def test_moon_tilt_faces_the_sun():
     assert 90 < evening < 180
     morning = astro.bright_limb_angle(datetime(2026, 10, 30, 11, 0, tzinfo=UTC), 39.9526, -75.1652)
     assert 180 < morning < 360
+
+
+# ── radar ────────────────────────────────────────────────────────────────────
+
+class FakeRadar:
+    """Stands in for sky_radar.RadarFetcher: no network, a fixed loop."""
+
+    def __init__(self, frames=6):
+        self.frames, self.resets, self.draws, self.refreshes = frames, 0, 0, 0
+
+    def _playback_frames(self):
+        return [object()] * self.frames
+
+    def get_loop_duration(self):
+        return self.frames * 0.5 + 1.5
+
+    def reset_loop(self):
+        self.resets += 1
+
+    def get_radar_image(self, w, h):
+        self.draws += 1
+        return __import__("PIL.Image", fromlist=["Image"]).new("RGB", (w, h), (0, 60, 0))
+
+    def needs_refresh(self, interval):
+        return True
+
+    def refresh_data(self, w, h):
+        self.refreshes += 1
+
+
+def radar_plugin(**cfg):
+    p = make_plugin(test_mode=False, page_seconds=7, **cfg)
+    p._stop.set()
+    p._place = {"lat": LAT, "lon": LON, "tz": "America/New_York"}
+    p._state = {"now": make_world(15)["cur"], "alerts": [], "alerts_ok": True}
+    return p
+
+
+def test_radar_page_joins_the_rotation_only_once_it_has_frames():
+    p = radar_plugin()
+    w = make_world(15)
+    assert "radar" in p.pages and ("radar", 0) not in p.page_sequence(w)       # nothing downloaded yet
+    p._radar = FakeRadar()
+    seq = p.page_sequence(w)
+    assert seq[0] == ("now", 0) and seq[1] == ("radar", 0)
+    p._radar = FakeRadar(frames=0)                                               # fetcher exists but has no frame yet
+    assert ("radar", 0) not in p.page_sequence(w)
+
+
+def test_radar_page_length_is_two_loops_within_limits():
+    p = radar_plugin()
+    p._radar = FakeRadar(frames=6)                                               # loop = 4.5 s
+    assert p._radar_page_seconds() == 9.0
+    p._radar = FakeRadar(frames=2)                                               # loop = 2.5 s -> never shorter than a page
+    assert p._radar_page_seconds() == 7.0
+    p._radar = FakeRadar(frames=40)                                              # capped at 30 s
+    assert p._radar_page_seconds() == 30.0
+    assert radar_plugin(radar_seconds=12)._radar_page_seconds() == 12.0
+    p._radar = FakeRadar(frames=6)
+    assert p.get_display_duration() == 7 * 6 + 9
+
+
+def test_radar_page_draws_the_fetcher_frame_and_restarts_the_loop_on_entry():
+    p = radar_plugin()
+    p._radar = FakeRadar()
+    now = datetime(2026, 10, 29, 20, 0, tzinfo=UTC).timestamp()
+    p._t0 = now
+    assert p.compose(now).getpixel((5, 5)) != (0, 60, 0)                         # page 1: the sky
+    frame = p.compose(now + 8)                                                   # page 2: the radar
+    assert frame.getpixel((5, 5)) == (0, 60, 0) and p._radar.resets == 1
+    p.compose(now + 9)
+    assert p._radar.resets == 1                                                  # staying on radar does not reset it
+    p.compose(now + 7 + 9 + 8)                                                   # on to another page ...
+    p.compose(now + 7 + 9 + 7 * 6 + 8)                                           # ... and round to the radar again
+    assert p._radar.resets == 2
+
+
+def test_radar_can_be_turned_off_and_settings_are_cleaned():
+    p = radar_plugin(radar=False)
+    assert "radar" not in p.pages
+    p._radar = FakeRadar()
+    assert ("radar", 0) not in p.page_sequence(make_world(15))
+    p = radar_plugin(pages=["radar"], radar=False)
+    assert p.pages and "radar" not in p.pages                                    # never an empty rotation
+    p = radar_plugin(radar_range_miles=-4, radar_past_frames=99, radar_frame_seconds="fast", radar_line_color=[999, "x"],
+                     radar_map_brightness=7)
+    c = p.radar_cfg
+    assert c["range_miles"] == 5.0 and c["past_frames"] == 12 and c["frame_seconds"] == 0.5
+    assert c["line_color"] == (0, 130, 70) and c["map_brightness"] == 1.0 and c["tile_server"] == ""
+
+
+def test_radar_refresh_uses_panel_size_and_waits_for_a_location():
+    p = radar_plugin()
+    p._radar = FakeRadar()
+    p._radar_sig = (LAT, LON) + tuple(sorted((k, str(v)) for k, v in p.radar_cfg.items()))
+    p._update_radar()
+    assert p._radar.refreshes == 1
+    nowhere = radar_plugin(latitude=None, longitude=None)
+    nowhere._place = {}
+    nowhere._update_radar()                                                      # no location yet: quietly nothing
+    assert nowhere._radar is None

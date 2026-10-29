@@ -42,6 +42,19 @@ def _zone(name: str):
         return datetime.now().astimezone().tzinfo or UTC
 
 
+def _num(v: Any, default: float) -> float:
+    f = data.num(v)
+    return default if f is None else f
+
+
+def _rgb(v: Any, default: tuple) -> tuple:
+    try:
+        r, g, b = (int(min(255, max(0, x))) for x in v)
+        return (r, g, b)
+    except (TypeError, ValueError):
+        return default
+
+
 class SkyWeatherPlugin(BasePlugin):
     """The sky as a weather display."""
 
@@ -67,6 +80,10 @@ class SkyWeatherPlugin(BasePlugin):
         self._t0 = 0.0
         self._last_display = 0.0
         self._demo_t0 = time.time()
+        self._radar = None                                   # sky_radar.RadarFetcher once the location is known
+        self._radar_sig: Optional[tuple] = None
+        self._prev_page = ""
+        self._radar_announced = False
         self.enable_scrolling = True                         # high-FPS path: clouds drift, rain falls, stars twinkle
         self._load_config(config)
 
@@ -78,6 +95,7 @@ class SkyWeatherPlugin(BasePlugin):
             self.logger.info("Sky Weather TEST MODE: a made-up day, no polling")
         else:
             threading.Thread(target=self._loop, daemon=True, name="sky-weather-poll").start()
+            threading.Thread(target=self._radar_loop, daemon=True, name="sky-weather-radar").start()
         self.logger.info("Sky Weather ready  pages=%s  W=%d H=%d", self.pages, self.W, self.H)
 
     # ── config ───────────────────────────────────────────────────────────────
@@ -86,8 +104,23 @@ class SkyWeatherPlugin(BasePlugin):
         self.ha_url = str(c.get("ha_url", "http://homeassistant.local:8123")).rstrip("/")
         self.ha_token = str(c.get("ha_token", ""))
         self.entities = {k: data.valid_entity(c.get(k), v) for k, v in data.DEFAULTS.items()}
-        pages = [p for p in (c.get("pages") or render.DEFAULT_PAGES) if p in render.PAGES]
-        self.pages: List[str] = pages or list(render.DEFAULT_PAGES)
+        self.radar_on = bool(c.get("radar", True))
+        pages = [p for p in (c.get("pages") or render.DEFAULT_PAGES) if p in render.ALL_PAGES and (self.radar_on or p != "radar")]
+        self.pages: List[str] = pages or [p for p in render.DEFAULT_PAGES if p != "radar" or self.radar_on]
+        self.radar_cfg = {
+            "range_miles": max(5.0, _num(c.get("radar_range_miles"), 75.0)),
+            "update_interval": int(max(60, _num(c.get("radar_update_interval"), 180))),
+            "map_style": str(c.get("radar_map_style") or "carto_dark"),
+            "tile_server": str(c.get("radar_tile_server") or ""),
+            "map_brightness": min(1.0, max(0.1, _num(c.get("radar_map_brightness"), 0.5))),
+            "show_nowcast": bool(c.get("radar_show_nowcast", False)),
+            "past_frames": int(min(12, max(2, _num(c.get("radar_past_frames"), 6)))),
+            "frame_seconds": min(2.0, max(0.1, _num(c.get("radar_frame_seconds"), 0.5))),
+            "loop_pause_seconds": min(5.0, max(0.0, _num(c.get("radar_loop_pause_seconds"), 1.5))),
+            "line_color": _rgb(c.get("radar_line_color"), (0, 130, 70)),
+            "fill_color": _rgb(c.get("radar_fill_color"), (15, 25, 15)),
+        }
+        self.radar_seconds = float(max(0, _num(c.get("radar_seconds"), 0)))      # 0 = two loops, between page_seconds and 30
         self.page_seconds = float(max(3, int(c.get("page_seconds", 7) or 7)))
         self.poll = float(max(15, int(c.get("poll_seconds", 60) or 60)))
         self.forecast_poll = float(max(120, int(c.get("forecast_seconds", 600) or 600)))
@@ -150,6 +183,53 @@ class SkyWeatherPlugin(BasePlugin):
                 self._error = "%s: %s" % (type(exc).__name__, str(exc)[:80])
                 self.logger.warning("HA poll failed (%s)", self._error)
             self._stop.wait(self.poll)
+
+    # ── radar (own thread: tile downloads can take a while and must never stall the weather poll) ──
+
+    def _ensure_radar(self) -> None:
+        if not self.radar_on or self.lat is None or self.lon is None:
+            return
+        cfg = self.radar_cfg
+        sig = (self.lat, self.lon) + tuple(sorted((k, str(v)) for k, v in cfg.items()))
+        if sig == self._radar_sig and self._radar is not None:
+            return
+        from sky_radar import RadarFetcher                    # lazy: pulls in requests and the tile code
+        self._radar = RadarFetcher(
+            self.lat, self.lon, cfg["range_miles"], self.cache_manager, map_style=cfg["map_style"],
+            custom_tile_server=cfg["tile_server"] or None, line_color=cfg["line_color"], fill_color=cfg["fill_color"],
+            map_brightness=cfg["map_brightness"], show_nowcast=cfg["show_nowcast"], past_frames=cfg["past_frames"],
+            frame_seconds=cfg["frame_seconds"], loop_pause_seconds=cfg["loop_pause_seconds"], plugin_id=self.plugin_id)
+        self._radar_sig = sig
+
+    def _update_radar(self) -> None:
+        self._ensure_radar()
+        fetcher = self._radar
+        if fetcher is not None and fetcher.needs_refresh(self.radar_cfg["update_interval"]):
+            fetcher.refresh_data(self.W, self.H)
+
+    def _radar_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                self._update_radar()
+                if not self._radar_announced and self._radar_ready():
+                    self._radar_announced = True
+                    self.logger.info("Radar ready: %d frames, %.1fs loop", len(self._radar._playback_frames()),
+                                     self._radar.get_loop_duration())
+            except Exception as exc:  # noqa: BLE001 - radar trouble never touches the other pages
+                self.logger.warning("radar refresh failed: %s", exc)
+            self._stop.wait(10.0)
+
+    def _radar_ready(self) -> bool:
+        """True once the radar has at least one finished frame to play."""
+        f = self._radar
+        return bool(self.radar_on and f is not None and f._playback_frames())
+
+    def _radar_page_seconds(self) -> float:
+        if self.radar_seconds:
+            return self.radar_seconds
+        f = self._radar
+        loop = f.get_loop_duration() if f is not None else 0.0
+        return min(30.0, max(self.page_seconds, 2.0 * loop))
 
     def _apply_state(self, state: Dict[str, Any], now: float) -> None:
         fresh = False
@@ -240,7 +320,8 @@ class SkyWeatherPlugin(BasePlugin):
 
     def page_sequence(self, world: Dict[str, Any]) -> List[str]:
         alerts = [("alert", i) for i in range(len(world.get("alerts") or []))]
-        return alerts + [(p, 0) for p in self.pages]
+        ready = self._radar_ready()
+        return alerts + [(p, 0) for p in self.pages if p != "radar" or ready]
 
     def compose(self, now: Optional[float] = None) -> Optional[Image.Image]:
         """The next frame, or None when there is no data yet (separate from display() for tests)."""
@@ -262,10 +343,21 @@ class SkyWeatherPlugin(BasePlugin):
             return self._fit(render.notice(now))
         seq = self.page_sequence(world)
         name, arg = seq[self._index(seq, now)]
+        if name == "radar":
+            if self._prev_page != "radar":
+                self._radar.reset_loop()                      # always start the loop on its first frame
+            self._prev_page = name
+            frame = self._radar.get_radar_image(self.W, self.H)
+            if frame is not None:
+                return self._fit(frame.convert("RGB"))
+            name = "now"
+        self._prev_page = name
         return self._fit(render.render(world, name, None, arg))
 
     def _seconds_for(self, seq, i: int) -> float:
-        return self.alert_seconds if seq[i][0] == "alert" else self.page_seconds
+        if seq[i][0] == "alert":
+            return self.alert_seconds
+        return self._radar_page_seconds() if seq[i][0] == "radar" else self.page_seconds
 
     def _index(self, seq, now: float) -> int:
         """Which page is up: pages take turns from the moment this plugin's turn on the panel began."""
@@ -313,7 +405,9 @@ class SkyWeatherPlugin(BasePlugin):
             return TIMELAPSE + DEMO_PAGE * 6
         with self._lock:
             n_alerts = min(len(self._state.get("alerts", [])), self.max_alerts) if self.show_alerts else 0
-        return self.page_seconds * len(self.pages) + self.alert_seconds * n_alerts
+        others = [p for p in self.pages if p != "radar"]
+        radar = self._radar_page_seconds() if ("radar" in self.pages and self._radar_ready()) else 0.0
+        return self.page_seconds * len(others) + radar + self.alert_seconds * n_alerts
 
     def validate_config(self) -> bool:
         if not self.ha_token:

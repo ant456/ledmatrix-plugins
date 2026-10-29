@@ -880,7 +880,8 @@ def notice(now: float) -> Image.Image:
 
 PAGES = {"now": page_now, "sun": page_sun, "moon": page_moon, "hourly": page_hourly,
          "daily": page_daily, "details": page_details}
-DEFAULT_PAGES = ["now", "sun", "moon", "hourly", "daily", "details"]
+DEFAULT_PAGES = ["now", "radar", "sun", "moon", "hourly", "daily", "details"]
+ALL_PAGES = tuple(PAGES) + ("radar",)         # radar is drawn by the manager's radar fetcher, not by this module
 
 
 def render(world: Dict[str, Any], page: str, S: Optional[Dict[str, Any]] = None, alert_index: int = 0) -> Image.Image:
