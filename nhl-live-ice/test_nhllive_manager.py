@@ -602,7 +602,7 @@ def test_logo_setting_resolves_to_a_file(tmp_path):
     q = make({"scoreboard_logo": mine})
     assert q._logo_file() == mine
     r = make({"scoreboard_logo": "assets/mine.png"})
-    assert r._logo_file() == os.path.join(here, "assets", "mine.png")           # relative: inside the plugin folder
+    assert os.path.normpath(r._logo_file()) == os.path.join(here, "assets", "mine.png")           # relative: inside the plugin folder
     s = make({"scoreboard_logo": "~/mine.png"})
     assert s._logo_file() == os.path.expanduser("~/mine.png")
 
