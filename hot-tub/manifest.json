@@ -1,0 +1,56 @@
+{
+  "id": "hot-tub",
+  "name": "Hot Tub",
+  "version": "3.0.0",
+  "description": "Live hot tub status from Home Assistant over MQTT, in the arcade style of the NBA and NFL Live plugins: status header, gradient temperature panel with arcade numerals, a tub scene where the water rises toward the set point with waves, bubbles and steam, heater/filter/jets indicators, a fault screen and a READY burst.",
+  "author": "Custom",
+  "entry_point": "manager.py",
+  "class_name": "HotTubPlugin",
+  "display_modes": [
+    "hot_tub"
+  ],
+  "update_interval": 5,
+  "versions": [
+    {
+      "version": "3.0.0",
+      "released": "2026-10-26",
+      "ledmatrix_min": "2.0.0",
+      "changes": "Redesign in the NBA/NFL Live style: shared 3x5 pixel font and drawing kit, tub scene with live water level, FAULT hazard screen, READY burst. Replaces the PressStart2P text layout. LaMetric icon options removed."
+    },
+    {
+      "version": "2.0.0",
+      "released": "2026-10-26",
+      "ledmatrix_min": "2.0.0",
+      "changes": "Arcade restyle to match media-marquee: PressStart2P on 8px rows, segmented approach bar, blinking ERROR and NO DATA attract screen. Water animation removed. font_path and font_antialias options removed."
+    },
+    {
+      "version": "1.4.0",
+      "released": "2026-09-07",
+      "ledmatrix_min": "2.0.0",
+      "changes": "Added a heater indicator (flame, lit while actively heating) alongside filter and bubbles."
+    },
+    {
+      "version": "1.3.0",
+      "released": "2026-09-07",
+      "ledmatrix_min": "2.0.0",
+      "changes": "Larger label, status and target text -- the previous sizes were hard to read on the panel. Layout restacked to suit."
+    },
+    {
+      "version": "1.2.0",
+      "released": "2026-09-07",
+      "ledmatrix_min": "2.0.0",
+      "changes": "Configurable font (defaults to DejaVu Sans Mono Bold) with per-size caching, and crisp non-antialiased text rendering by default. Filter now drawn as a cartridge icon, with optional LaMetric icon support like bubbles."
+    },
+    {
+      "version": "1.1.0",
+      "released": "2026-09-07",
+      "ledmatrix_min": "2.0.0",
+      "changes": "Animated water rendering: tub fills as the water approaches target, live wave surface, bubbles rising when on, steam while heating. Bubbles now shown as a three-level gauge (off/medium/high) rather than on/off."
+    },
+    {
+      "version": "1.0.0",
+      "released": "2026-09-07",
+      "ledmatrix_min": "2.0.0"
+    }
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "default": true
+    },
+    "mqtt_host": {
+      "type": "string",
+      "title": "MQTT Host",
+      "description": "Broker address (same one Home Assistant uses)",
+      "default": "localhost"
+    },
+    "mqtt_port": {
+      "type": "integer",
+      "title": "MQTT Port",
+      "default": 1883
+    },
+    "mqtt_topic": {
+      "type": "string",
+      "title": "MQTT Topic",
+      "description": "Topic the Home Assistant automation publishes to",
+      "default": "ledmatrix/hottub"
+    },
+    "mqtt_username": {
+      "type": "string",
+      "title": "MQTT Username",
+      "default": ""
+    },
+    "mqtt_password": {
+      "type": "string",
+      "title": "MQTT Password",
+      "default": ""
+    },
+    "show_filter": {
+      "type": "boolean",
+      "title": "Show Filter Indicator",
+      "default": true
+    },
+    "show_bubbles": {
+      "type": "boolean",
+      "title": "Show Bubbles Indicator",
+      "default": true
+    },
+    "show_heater": {
+      "type": "boolean",
+      "title": "Show Heater Indicator",
+      "default": true
+    },
+    "display_duration": {
+      "type": "integer",
+      "title": "Display Duration (seconds)",
+      "default": 15
+    },
+    "show_ready_burst": {
+      "type": "boolean",
+      "title": "READY Burst",
+      "description": "Celebrate with a short sunburst when the water finishes heating to target.",
+      "default": true
+    }
+  }
+}

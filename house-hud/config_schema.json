@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "enabled":          { "type": "boolean", "default": true },
+    "display_duration": { "type": "integer", "default": 14, "minimum": 5, "description": "Seconds per turn on the panel (screens alternate every page_seconds)" },
+    "ha_url":           { "type": "string",  "default": "http://homeassistant.local:8123" },
+    "ha_token":         { "type": "string",  "description": "HA long-lived access token" },
+    "poll_seconds":     { "type": "integer", "default": 5, "minimum": 2, "description": "Seconds between polls of Home Assistant" },
+    "page_seconds":     { "type": "integer", "default": 7, "minimum": 3, "description": "Seconds each screen stays up" },
+    "events":           { "type": "boolean", "default": true, "description": "Burst when the front door opens or unlocks, or you arrive home" },
+    "interrupt":        { "type": "boolean", "default": true, "description": "Take over the panel for an event instead of waiting for the plugin's turn" },
+    "event_seconds":    { "type": "integer", "default": 5, "minimum": 2, "description": "How long an event burst stays up" },
+    "test_mode":        { "type": "boolean", "default": false, "description": "Play a made-up day of events (no polling). Turn off afterwards." },
+    "screens": {
+      "type": "array",
+      "description": "Screens of up to four tiles each. Defaults match this house; see the README for tile types.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tiles": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "type": "object",
+              "properties": {
+                "type":     { "type": "string", "enum": ["lock", "opening", "safe", "presence", "temp", "count"] },
+                "label":    { "type": "string", "description": "Up to 7 characters" },
+                "entity":   { "type": "string", "description": "lock, opening, presence and temp tiles" },
+                "entities": { "type": "array", "items": { "type": "string" }, "description": "safe tiles: alarm binary_sensors; ALARM when any is on" },
+                "attr":     { "type": "string", "description": "temp tiles: read this attribute instead of the state (e.g. current_temperature)" },
+                "icon":     { "type": "string", "enum": ["thermo", "sun", "tub", "bulb", "house", "smoke", "door", "lock"] },
+                "domain":   { "type": "string", "description": "count tiles: e.g. light" },
+                "state":    { "type": "string", "description": "count tiles: the state to count (default on)" }
+              },
+              "required": ["type"]
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "_comment": "Renders every mode (live, recent, upcoming) from the plugin's offline demo games (made-up players with leaders and synthetic headshots) so nothing reaches the network. The 'locked' variant turns the favorites lock on for TOR, which has a live game, no recent game and no upcoming game in the demo slate -- exercising the empty-mode path too.",
+  "config": {
+    "enabled": true,
+    "favorite_teams": [
+      "TOR"
+    ],
+    "lock_to_favorites": false,
+    "advanced": {
+      "test_mode": true,
+      "animations": false,
+      "headshot_downloads": false
+    }
+  },
+  "empty_check": "strict",
+  "variants": [
+    {
+      "name": "locked",
+      "config": {
+        "lock_to_favorites": true
+      }
+    },
+    {
+      "name": "animated",
+      "config": {
+        "advanced": {
+          "test_mode": true,
+          "animations": true,
+          "headshot_downloads": false
+        }
+      }
+    },
+    {
+      "name": "no_recent_or_upcoming",
+      "config": {
+        "show_recent": false,
+        "show_upcoming": false
+      }
+    }
+  ]
+}

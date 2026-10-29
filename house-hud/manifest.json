@@ -1,0 +1,26 @@
+{
+  "id": "house-hud",
+  "name": "House HUD",
+  "version": "1.0.0",
+  "description": "A game-style status screen for the house, read from Home Assistant: four 32px tiles per screen (front lock, door, smoke alarms, who is home; inside / outside temperature, lights on, hot tub) with pixel icons, status colours and blinking alarms. Events (the front door opens or unlocks, you arrive home) take over the panel with a burst. Tiles are configurable.",
+  "author": "ant456",
+  "entry_point": "manager.py",
+  "class_name": "HouseHudPlugin",
+  "category": "utility",
+  "tags": ["home-assistant", "status", "security", "arcade"],
+  "icon": "fas fa-house-signal",
+  "display_modes": ["house_hud"],
+  "update_interval": 60,
+  "default_duration": 14,
+  "config_schema": "config_schema.json",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "released": "2026-10-28",
+      "ledmatrix_min": "2.0.0",
+      "notes": "First release: lock, opening, smoke, presence, temperature and count tiles; event bursts with on-demand interrupt; one HA template call per poll; test_mode demo."
+    }
+  ],
+  "requires": {"python": ">=3.9", "display_size": {"min_width": 64, "min_height": 32}},
+  "license": "GPL-3.0"
+}

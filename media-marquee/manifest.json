@@ -1,0 +1,33 @@
+{
+  "id": "media-marquee",
+  "name": "Media Marquee",
+  "version": "0.3.0",
+  "description": "Everything that plays, in one arcade-style display. Plex video shows its Fanart.tv banner alternating with an info card; other apps and music show the player's art or the LaMetric service icon with title, time remaining and a segmented progress bar. Idle: rotating banners (curated in the portal, else recently added on Plex). Web portal: live panel view, banner picker, icon and GIF upload. Replaces plex-marquee + now-playing.",
+  "author": "ant456",
+  "entry_point": "manager.py",
+  "class_name": "MediaMarqueePlugin",
+  "display_modes": [
+    "media_marquee"
+  ],
+  "update_interval": 3,
+  "versions": [
+    {
+      "version": "0.3.0",
+      "released": "2026-10-26",
+      "ledmatrix_min": "2.0.0",
+      "notes": "Arcade redesign in the NBA/NFL Live style: shared 3x5 pixel font and drawing kit, header band + gradient title row on the info card, NOW PLAYING burst when new content starts, hazard-stripe INSERT COIN idle screen."
+    },
+    {
+      "version": "0.2.0",
+      "released": "2026-10-26",
+      "ledmatrix_min": "2.0.0",
+      "notes": "Web portal: live view, banner picker + rotation editor, icon/GIF upload. Uploaded GIFs render full screen. Display path never blocks on the network."
+    },
+    {
+      "version": "0.1.0",
+      "released": "2026-10-26",
+      "ledmatrix_min": "2.0.0",
+      "notes": "First combined release of plex-marquee and now-playing"
+    }
+  ]
+}

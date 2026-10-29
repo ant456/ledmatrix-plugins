@@ -1,0 +1,26 @@
+{
+  "id": "print-monitor",
+  "name": "Print Monitor",
+  "version": "1.0.0",
+  "description": "3D print status for a Bambu Lab printer (via Home Assistant) in the NBA / NFL / NHL Live arcade style: the model's thumbnail, a big percent, time left and ETA, nozzle and bed temperatures, layer count and a segmented gauge in the filament colour. Preparing, paused and failed prints get their own screens, and a finished print bursts onto the panel. Idle printers are skipped so the rotation moves on.",
+  "author": "ant456",
+  "entry_point": "manager.py",
+  "class_name": "PrintMonitorPlugin",
+  "category": "utility",
+  "tags": ["3d-printing", "bambu", "home-assistant", "arcade"],
+  "icon": "fas fa-cube",
+  "display_modes": ["print_monitor"],
+  "update_interval": 60,
+  "default_duration": 15,
+  "config_schema": "config_schema.json",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "released": "2026-10-28",
+      "ledmatrix_min": "2.0.0",
+      "notes": "First release: printing, preparing, paused, failed and done screens, PRINT DONE! burst, model thumbnail from the printer's cover image, filament-colour gauge, on-demand interrupt for done / failed / paused, idle skip."
+    }
+  ],
+  "requires": {"python": ">=3.9", "display_size": {"min_width": 64, "min_height": 32}},
+  "license": "GPL-3.0"
+}

@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Media Marquee</title>
+<style>
+@font-face { font-family: "PS2P"; src: url("/font.ttf"); font-display: swap; }
+:root {
+  --bg: #0a0a0f; --panel: #14141d; --panel2: #1b1b27; --line: #2a2a3a;
+  --text: #e8e8f0; --dim: #8c8ca3; --coin: #ffd60a; --cyan: #3de0ff; --ok: #33d17a; --bad: #ff5c5c;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 16px; }
+h1 { font: 16px/1.3 "PS2P", monospace; color: var(--coin); margin: 6px 0 14px; letter-spacing: 1px; }
+h2 { font: 11px/1.4 "PS2P", monospace; color: var(--cyan); margin: 0 0 12px; }
+nav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+nav button { font: 10px "PS2P", monospace; background: var(--panel); color: var(--dim); border: 1px solid var(--line); padding: 10px 12px; cursor: pointer; border-radius: 4px; }
+nav button.on { color: var(--bg); background: var(--coin); border-color: var(--coin); }
+section { display: none; } section.on { display: block; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+input[type=text] { flex: 1; min-width: 160px; background: var(--panel2); border: 1px solid var(--line); color: var(--text); padding: 9px 10px; border-radius: 6px; font: inherit; }
+button.btn { background: var(--panel2); color: var(--text); border: 1px solid var(--line); padding: 8px 12px; border-radius: 6px; cursor: pointer; font: inherit; }
+button.btn:hover { border-color: var(--cyan); }
+button.btn.primary { background: var(--coin); color: #111; border-color: var(--coin); font-weight: 600; }
+button.btn.danger:hover { border-color: var(--bad); color: var(--bad); }
+button.btn:disabled { opacity: .4; cursor: default; }
+.dim { color: var(--dim); } .ok { color: var(--ok); } .bad { color: var(--bad); }
+.led { width: 100%; max-width: 768px; image-rendering: pixelated; border: 6px solid #000; border-radius: 6px; background: #000; display: block; box-shadow: 0 0 0 1px var(--line); }
+table { width: 100%; border-collapse: collapse; } td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); font-size: 13px; }
+td:first-child { overflow-wrap: anywhere; }                 /* only the long entity id wraps */
+td:not(:first-child), th:not(:first-child) { white-space: nowrap; }
+th { color: var(--dim); font-weight: 500; }
+.kv { display: grid; grid-template-columns: 130px 1fr; gap: 4px 10px; } .kv div:nth-child(odd) { color: var(--dim); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.tile { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.tile img.ban { width: 100%; aspect-ratio: 4/1; object-fit: cover; image-rendering: auto; border-radius: 4px; background: #000; display: block; margin-bottom: 8px; }
+.tile .meta { font-size: 12px; color: var(--dim); margin-bottom: 8px; }
+.results button { display: block; width: 100%; text-align: left; margin: 0 0 4px; }
+.lib { display: grid; grid-template-columns: 120px 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.lib img { width: 120px; aspect-ratio: 4/1; object-fit: cover; border-radius: 3px; background: #000; }
+.lib.off img, .lib.off > div:nth-child(2) { opacity: .45; }   /* dim the entry, keep the buttons usable */
+.svc { display: grid; grid-template-columns: 64px 1fr; gap: 12px; }
+.svc img.ic { width: 64px; height: 64px; image-rendering: pixelated; background: #000; border-radius: 6px; }
+.svc img.gf { width: 100%; max-width: 256px; image-rendering: pixelated; background: #000; border-radius: 4px; margin-top: 6px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+#toast { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--line); padding: 9px 14px; border-radius: 6px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; }
+#toast.show { opacity: 1; } #toast.err { border-color: var(--bad); color: var(--bad); }
+@media (max-width: 560px) { .lib { grid-template-columns: 90px 1fr; } .lib .acts { grid-column: 1 / -1; } .lib img { width: 90px; } .kv { grid-template-columns: 100px 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>MEDIA MARQUEE</h1>
+  <nav id="tabs">
+    <button data-t="live" class="on">LIVE</button>
+    <button data-t="banners">BANNERS</button>
+    <button data-t="icons">ICONS &amp; GIFS</button>
+  </nav>
+
+  <!-- LIVE -->
+  <section id="live" class="on">
+    <div class="card">
+      <h2>ON THE PANEL</h2>
+      <img id="frame" class="led" alt="current LED panel frame">
+      <p class="dim" style="margin:8px 0 0">Refreshes every second. This is the plugin's own render, not a camera.</p>
+    </div>
+    <div class="card"><h2>NOW PLAYING</h2><div id="np" class="kv"></div></div>
+    <div class="card">
+      <h2>PLAYERS</h2>
+      <table><thead><tr><th>Entity</th><th>State</th><th>App</th></tr></thead><tbody id="ents"></tbody></table>
+      <p id="idleinfo" class="dim" style="margin:10px 0 0"></p>
+    </div>
+  </section>
+
+  <!-- BANNERS -->
+  <section id="banners">
+    <div class="card">
+      <h2>FIND A TITLE</h2>
+      <div class="row">
+        <input type="text" id="q" placeholder="Search your Plex library…">
+        <button class="btn primary" id="qgo">Search</button>
+      </div>
+      <div id="results" class="results" style="margin-top:10px"></div>
+    </div>
+    <div class="card" id="pickcard" style="display:none">
+      <h2 id="picktitle">BANNERS</h2>
+      <p class="dim" style="margin-top:0">Add the ones you like. They join the idle rotation, and the first one for a title is used whenever that title plays.</p>
+      <div id="pickgrid" class="grid"></div>
+    </div>
+    <div class="card">
+      <h2>ROTATION</h2>
+      <p class="dim" style="margin-top:0">When anything is saved here, the idle display rotates these instead of the automatic recently-added banners.</p>
+      <div id="lib"></div>
+    </div>
+  </section>
+
+  <!-- ICONS -->
+  <section id="icons">
+    <div class="card"><h2>SERVICES</h2>
+      <p class="dim" style="margin-top:0">Icon: replaces the LaMetric icon (PNG, GIF or JPG, shown 32&times;32). GIF: plays full screen with a title strip when there is no album or poster art. Max upload is small on purpose.</p>
+    </div>
+    <div id="svcs" class="grid"></div>
+  </section>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const h = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  for (const c of kids.flat()) {
+    if (c === false || c == null) continue;          // `cond && h(...)` yields false: render nothing
+    e.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return e;
+};
+let toastT;
+function toast(msg, bad) { const t = $("#toast"); t.textContent = msg; t.className = "show" + (bad ? " err" : ""); clearTimeout(toastT); toastT = setTimeout(() => t.className = "", 2600); }
+async function api(path, opts) {
+  const r = await fetch(path, opts); let j = null;
+  try { j = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error((j && j.error) || r.statusText);
+  return j;
+}
+const fmt = s => { s = Math.max(0, s | 0); const h_ = (s / 3600) | 0, m = ((s % 3600) / 60) | 0, x = s % 60; return (h_ ? h_ + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
+
+/* tabs */
+$("#tabs").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === b.dataset.t));
+  if (b.dataset.t === "banners") loadLib(); if (b.dataset.t === "icons") loadSvcs();
+});
+
+/* LIVE */
+async function tickLive() {
+  if (!$("#live").classList.contains("on") || document.hidden) return;
+  $("#frame").src = "/api/frame.png?scale=6&t=" + Date.now();
+  try {
+    const s = await api("/api/status"), m = s.media, np = $("#np");
+    np.replaceChildren();
+    const kv = (k, v) => np.append(h("div", {}, k), h("div", {}, v));
+    if (!m) kv("State", "Nothing playing");
+    else {
+      kv("Title", m.title || "(player reports no title)"); if (m.subtitle) kv("Subtitle", m.subtitle);
+      kv("Service", m.label + (m.app_name ? "  (" + m.app_name + ")" : "")); kv("Player", m.entity);
+      kv("State", m.state);
+      kv("Time", m.duration ? fmt(m.position ?? 0) + " / " + fmt(m.duration) : (m.position != null ? fmt(m.position) + " (no duration)" : "player reports no timing"));
+      kv("Banner", m.uses_tmdb ? (m.banner ? "found" : (m.resolved ? "none found" : "looking…")) : "not looked up (not a Plex title)");
+      kv("Art", m.art ? "from " + (m.art === "player" ? "the player" : "TMDB poster") : (m.gif ? "uploaded GIF" : "service icon"));
+    }
+    const eb = $("#ents"); eb.replaceChildren();
+    for (const e of s.entities) {
+      const live = e.state === "playing", col = live ? "var(--ok)" : (e.state === "unreachable" ? "var(--bad)" : "var(--dim)");
+      eb.append(h("tr", {}, h("td", {}, e.entity_id), h("td", {}, h("span", { class: "dot", style: "background:" + col }), e.state), h("td", {}, e.app || "–")));
+    }
+    if (!s.entities.length) eb.append(h("tr", {}, h("td", { colspan: 3, class: "dim" }, "No entities configured.")));
+    $("#idleinfo").textContent = `Idle rotation: ${s.idle.showing} banner(s) ready (${s.idle.curated} curated, ${s.idle.auto} recently added).`;
+  } catch (e) { toast(e.message, true); }
+}
+setInterval(tickLive, 1000); tickLive();
+
+/* BANNERS */
+async function search() {
+  const q = $("#q").value.trim(); if (!q) return;
+  const box = $("#results"); box.replaceChildren(h("span", { class: "dim" }, "Searching…"));
+  try {
+    const r = await api("/api/search?q=" + encodeURIComponent(q)); box.replaceChildren();
+    if (!r.length) box.append(h("span", { class: "dim" }, "No matches in Plex (is plex_url / plex_token set?)"));
+    for (const t of r) box.append(h("button", { class: "btn", onclick: () => pick(t) }, `${t.title}${t.year ? " (" + t.year + ")" : ""} · ${t.type === "movie" ? "Movie" : "Show"}`));
+  } catch (e) { box.replaceChildren(); toast(e.message, true); }
+}
+$("#qgo").addEventListener("click", search); $("#q").addEventListener("keydown", e => e.key === "Enter" && search());
+
+async function pick(t) {
+  const card = $("#pickcard"), grid = $("#pickgrid"); card.style.display = "block";
+  $("#picktitle").textContent = t.title.toUpperCase(); grid.replaceChildren(h("span", { class: "dim" }, "Loading banners…"));
+  card.scrollIntoView({ behavior: "smooth" });
+  try {
+    const r = await api(`/api/banners?title=${encodeURIComponent(t.title)}&year=${encodeURIComponent(t.year)}&type=${t.type}`);
+    grid.replaceChildren();
+    if (!r.banners.length) grid.append(h("span", { class: "dim" }, "Fanart.tv has no images for this title."));
+    for (const b of r.banners) {
+      const add = h("button", { class: "btn primary", onclick: async () => {
+        add.disabled = true;
+        try { await api("/api/library", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: t.title, url: b.url, tmdb_id: r.tmdb_id, media_type: r.media_type }) }); toast("Added to rotation"); loadLib(); }
+        catch (e) { toast(e.message, true); } add.disabled = false; } }, "Add");
+      grid.append(h("div", { class: "tile" }, h("img", { class: "ban", loading: "lazy", src: "/api/preview?url=" + encodeURIComponent(b.url) }),
+        h("div", { class: "meta" }, `${b.type} · ${b.lang || "no lang"} · ${b.likes} likes`), add));
+    }
+  } catch (e) { grid.replaceChildren(h("span", { class: "bad" }, e.message)); }
+}
+
+async function loadLib() {
+  const box = $("#lib");
+  try {
+    const items = await api("/api/library"); box.replaceChildren();
+    if (!items.length) box.append(h("span", { class: "dim" }, "Nothing curated yet. Search for a title above."));
+    const send = order => api("/api/reorder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order }) }).then(loadLib).catch(e => toast(e.message, true));
+    items.forEach((e, i) => {
+      const ids = items.map(x => x.id), mv = d => () => { const o = [...ids]; [o[i], o[i + d]] = [o[i + d], o[i]]; send(o); };
+      box.append(h("div", { class: "lib" + (e.enabled === false ? " off" : "") },
+        h("img", { loading: "lazy", src: "/api/preview?url=" + encodeURIComponent(e.url) }),
+        h("div", {}, h("div", {}, e.title), h("div", { class: "dim" }, (e.media_type === "movie" ? "Movie" : "Show") + (e.enabled === false ? " · off" : ""))),
+        h("div", { class: "acts row" },
+          h("button", { class: "btn", disabled: i === 0, onclick: mv(-1), title: "Move up" }, "↑"),
+          h("button", { class: "btn", disabled: i === items.length - 1, onclick: mv(1), title: "Move down" }, "↓"),
+          h("button", { class: "btn", onclick: () => api(`/api/library/${e.id}/toggle`, { method: "POST" }).then(loadLib).catch(x => toast(x.message, true)) }, e.enabled === false ? "Enable" : "Disable"),
+          h("button", { class: "btn danger", onclick: () => confirm("Remove “" + e.title + "”?") && api(`/api/library/${e.id}`, { method: "DELETE" }).then(loadLib).catch(x => toast(x.message, true)) }, "Remove"))));
+    });
+  } catch (e) { toast(e.message, true); }
+}
+
+/* ICONS & GIFS */
+async function upload(kind, key) {
+  const inp = h("input", { type: "file", accept: kind === "gif" ? "image/gif" : "image/png,image/gif,image/jpeg" });
+  inp.addEventListener("change", async () => {
+    if (!inp.files[0]) return; const fd = new FormData(); fd.append("file", inp.files[0]);
+    try { await api(`/api/upload_${kind}/${key}`, { method: "POST", body: fd }); toast("Uploaded"); loadSvcs(); } catch (e) { toast(e.message, true); }
+  }); inp.click();
+}
+async function loadSvcs() {
+  const box = $("#svcs");
+  try {
+    const list = await api("/api/services"); box.replaceChildren();
+    for (const s of list) {
+      const t = Date.now(), icon = h("img", { class: "ic", alt: "", src: "/api/icon_preview/" + s.key + "?t=" + t });
+      icon.addEventListener("error", () => { icon.style.visibility = "hidden"; });
+      const acts = h("div", { class: "row", style: "margin-top:6px" },
+        h("button", { class: "btn", onclick: () => upload("icon", s.key) }, "Upload icon"),
+        s.icon_override && h("button", { class: "btn danger", onclick: () => api("/api/icon/" + s.key, { method: "DELETE" }).then(loadSvcs).catch(e => toast(e.message, true)) }, "Use default"),
+        h("button", { class: "btn", onclick: () => upload("gif", s.key) }, s.gif ? "Replace GIF" : "Upload GIF"),
+        s.gif && h("button", { class: "btn danger", onclick: () => api("/api/gif/" + s.key, { method: "DELETE" }).then(loadSvcs).catch(e => toast(e.message, true)) }, "Remove GIF"));
+      box.append(h("div", { class: "tile svc" }, icon, h("div", {},
+        h("div", {}, h("span", { class: "dot", style: "background:" + s.color }), s.label),
+        h("div", { class: "dim" }, s.icon_override ? "custom icon" : (s.lametric_id ? "LaMetric #" + s.lametric_id : "no icon")),
+        acts, s.gif && h("img", { class: "gf", src: "/api/gif/" + s.key + "?t=" + t, alt: "uploaded gif" }))));
+    }
+  } catch (e) { toast(e.message, true); }
+}
+</script>
+</body>
+</html>

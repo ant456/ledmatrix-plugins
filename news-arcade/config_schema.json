@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "enabled": {"type": "boolean", "default": true, "description": "Enable News Arcade"},
+    "display_duration": {"type": "integer", "default": 45, "minimum": 10, "maximum": 300,
+      "description": "Seconds per turn on the panel. The story in progress carries over to the next turn."},
+    "feeds": {
+      "type": "array",
+      "description": "RSS or Atom feeds, shown round-robin",
+      "default": [{"name": "TOP SPORTS", "url": "https://www.espn.com/espn/rss/news"}],
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "description": "Shown in the header band"},
+          "url": {"type": "string", "description": "Feed URL"},
+          "color": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 255},
+            "minItems": 3, "maxItems": 3, "description": "Accent colour [r, g, b]; default cycles a palette"},
+          "logo": {"type": "string", "description": "Logo image path (absolute, or relative to the LEDMatrix folder)"},
+          "enabled": {"type": "boolean", "default": true}
+        },
+        "required": ["url"]
+      }
+    },
+    "headlines_per_feed": {"type": "integer", "default": 5, "minimum": 1, "maximum": 20,
+      "description": "Newest stories taken from each feed"},
+    "max_age_hours": {"type": "integer", "default": 48, "minimum": 1, "maximum": 336,
+      "description": "Drop stories older than this"},
+    "min_headline_seconds": {"type": "integer", "default": 6, "minimum": 3, "maximum": 60},
+    "max_headline_seconds": {"type": "integer", "default": 20, "minimum": 5, "maximum": 120,
+      "description": "Longest a single story stays up, however long the headline"},
+    "crawl_speed": {"type": "integer", "default": 36, "minimum": 10, "maximum": 120,
+      "description": "Pixels per second a long headline crawls"},
+    "show_logos": {"type": "boolean", "default": true, "description": "Logo / initials tile on the left"},
+    "breaking_alerts": {"type": "boolean", "default": true,
+      "description": "BREAKING burst when a feed publishes a new top story"},
+    "title_font": {"type": "string", "default": "7x13B",
+      "enum": ["7x13B", "8x13B", "6x10", "MatrixChunky8", "3x5"],
+      "description": "Headline face (BDF from assets/fonts; 3x5 is the pixel font at 2x)"},
+    "update_interval": {"type": "integer", "default": 300, "minimum": 60, "maximum": 3600,
+      "description": "Seconds between feed refreshes"},
+    "request_timeout": {"type": "integer", "default": 8, "minimum": 3, "maximum": 30}
+  },
+  "additionalProperties": false
+}

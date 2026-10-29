@@ -1,0 +1,18 @@
+{
+  "waze-travel": {
+    "enabled": true,
+    "display_duration": 20,
+    "update_interval": 120,
+    "ha_url": "http://homeassistant.local:8123",
+    "ha_token": "YOUR-TOKEN-HERE",
+    "traffic_alerts": true,
+    "destinations": [
+      {
+        "label": "WORK",
+        "entity": "sensor.work_duration_in_traffic",
+        "free_flow_entity": "sensor.work_duration",
+        "color": [255, 160, 0]
+      }
+    ]
+  }
+}

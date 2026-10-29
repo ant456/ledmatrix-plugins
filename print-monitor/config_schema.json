@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "enabled":          { "type": "boolean", "default": true },
+    "display_duration": { "type": "integer", "default": 15, "minimum": 5, "description": "Seconds per turn on the panel while a print is active" },
+    "ha_url":           { "type": "string",  "default": "http://homeassistant.local:8123" },
+    "ha_token":         { "type": "string",  "description": "HA long-lived access token" },
+    "printer_prefix":   { "type": "string",  "default": "p1s_YOURSERIAL",
+                          "description": "The printer's entity prefix: sensor.<prefix>_print_status etc. (from the Bambu Lab integration)" },
+    "poll_seconds":     { "type": "integer", "default": 5, "minimum": 2, "description": "Seconds between polls while a print is active" },
+    "idle_poll_seconds":{ "type": "integer", "default": 30, "minimum": 10, "description": "Seconds between polls while the printer is idle" },
+    "interrupt":        { "type": "boolean", "default": true, "description": "Take over the panel when a print finishes, fails or pauses" },
+    "finished_hold_minutes": { "type": "integer", "default": 30, "minimum": 0, "description": "How long the PRINT DONE card stays in the rotation after a print finishes" },
+    "show_idle":        { "type": "boolean", "default": false, "description": "Show a PRINTER IDLE card instead of skipping the plugin when nothing is printing" },
+    "show_cover":       { "type": "boolean", "default": true, "description": "Use the printer's cover image as the thumbnail" },
+    "test_mode":        { "type": "boolean", "default": false, "description": "Play a made-up print job through every screen (no printer polling). Turn off afterwards." },
+    "live_priority":    { "type": "boolean", "default": false, "description": "Ask the controller to prefer this plugin while a print is active" }
+  }
+}

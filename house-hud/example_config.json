@@ -1,0 +1,11 @@
+{
+  "house-hud": {
+    "enabled": true,
+    "display_duration": 14,
+    "ha_url": "http://homeassistant.local:8123",
+    "ha_token": "YOUR-TOKEN-HERE",
+    "page_seconds": 7,
+    "events": true,
+    "interrupt": true
+  }
+}

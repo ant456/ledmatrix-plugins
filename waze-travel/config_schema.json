@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "enabled":          { "type": "boolean", "default": true },
+    "display_duration": { "type": "number",  "default": 20, "minimum": 5 },
+    "update_interval":  { "type": "integer", "default": 120, "minimum": 30, "description": "Seconds between data refreshes" },
+    "live_priority":    { "type": "boolean", "default": false },
+    "ha_url":           { "type": "string",  "default": "http://homeassistant.local:8123" },
+    "ha_token":         { "type": "string",  "description": "HA long-lived access token" },
+    "traffic_alerts":   { "type": "boolean", "default": true, "description": "Burst when a route turns HEAVY or JAM" },
+    "number_font":      { "type": "string",  "default": "7x13B", "enum": ["7x13B", "8x13B", "9x15B", "6x10", "MatrixChunky8"],
+                          "description": "Face for the drive-time digits (BDF from assets/fonts)" },
+    "destinations": {
+      "type": "array",
+      "description": "Destinations to show, two per screen (more take turns)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label":  { "type": "string",  "description": "Short display name e.g. WORK (8 characters max)" },
+          "entity": { "type": "string",  "description": "HA sensor entity ID" },
+          "color":  { "type": "array",   "description": "RGB color [R, G, B]", "items": { "type": "integer" }, "minItems": 3, "maxItems": 3 },
+          "free_flow_entity": { "type": "string", "description": "Sensor with the drive time without traffic (e.g. HERE's duration sensor). Used as the free-flow baseline." },
+          "typical_minutes": { "type": "number", "description": "Fixed free-flow drive time; overrides free_flow_entity. Default: free_flow_entity, else the shortest time seen." }
+        },
+        "required": ["entity"]
+      }
+    }
+  }
+}

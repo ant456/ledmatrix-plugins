@@ -1,0 +1,78 @@
+{
+  "id": "nba-live-court",
+  "name": "NBA Live Court",
+  "version": "1.1.0",
+  "author": "ant456",
+  "description": "An arcade-style NBA show with three modes: live games (an LED arena scoreboard with clock, quarter and records, quarter scores, a flame on scoring runs, player cards with ESPN headshots and rarity frames, bursts for big runs and late lead changes), recently finished games (final score plus the same stat cards), and upcoming games (matchup, records, tip-off and spread). Pick favorite teams and switch on the favorites lock to show only their games in every mode. ESPN's public scoreboard, no API key.",
+  "entry_point": "manager.py",
+  "class_name": "NbaLiveCourtPlugin",
+  "category": "sports",
+  "tags": [
+    "nba",
+    "basketball",
+    "live",
+    "scoreboard",
+    "favorites",
+    "arcade",
+    "player-cards",
+    "schedule"
+  ],
+  "icon": "fas fa-basketball",
+  "display_modes": [
+    "nba_live",
+    "nba_recent",
+    "nba_upcoming"
+  ],
+  "update_interval": 600,
+  "default_duration": 20,
+  "config_schema": "config_schema.json",
+  "requirements_file": "requirements.txt",
+  "compatible_versions": [
+    ">=3.0.0"
+  ],
+  "versions": [
+    {
+      "version": "1.1.0",
+      "released": "2026-10-29",
+      "ledmatrix_min": "2.0.0",
+      "notes": "The hardwood court is replaced by an LED arena scoreboard like NHL Live Ice: red game clock, amber quarter, each team's record, and a gold lamp with the points of a 6+ point scoring run."
+    },
+    {
+      "version": "1.0.0",
+      "released": "2026-10-26",
+      "ledmatrix_min_version": "3.0.0",
+      "notes": "First release. Live, recent and upcoming NBA games in the retro-arcade style of NFL Live Field: court screen with quarter-by-quarter scores, CLUTCH warning and a flame on 8+ point runs; player cards for each game's points, rebounds and assists leaders (a player leading several categories is one card, with double-double / triple-double badges); bursts for big runs and fourth-quarter lead changes; favorites lock, spoiler delay and exclude list. Fetches ESPN one day at a time (yesterday, today, tomorrow in US Eastern) because ESPN rejects date ranges."
+    }
+  ],
+  "requires": {
+    "python": ">=3.9",
+    "display_size": {
+      "min_width": 64,
+      "min_height": 32
+    }
+  },
+  "display": {
+    "design_size": {
+      "width": 128,
+      "height": 64
+    }
+  },
+  "api_requirements": [
+    {
+      "name": "ESPN API",
+      "required": true,
+      "description": "ESPN's public NBA scoreboard (scores, period and clock, quarter scores, records, spread and per-team leaders) and ESPN player headshots. One request per day asked for (yesterday, today, tomorrow). No API key.",
+      "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
+    }
+  ],
+  "stars": 0,
+  "downloads": 0,
+  "verified": false,
+  "screenshot": "",
+  "license": "GPL-3.0",
+  "last_updated": "2026-10-26",
+  "assets": {
+    "uses_core_assets": true,
+    "nba_logos": "assets/sports/nba_logos/"
+  }
+}

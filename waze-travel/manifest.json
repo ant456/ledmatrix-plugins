@@ -1,0 +1,26 @@
+{
+  "id": "waze-travel",
+  "name": "Waze Travel Time",
+  "version": "2.0.0",
+  "description": "Drive times from Home Assistant's Waze Travel Time sensors in the NBA / NFL / NHL Live arcade style: a status-coloured row per destination (CLEAR, BUSY, HEAVY, JAM) with the delay against free flow, a congestion meter, a trend arrow and the minutes in big digits. A route turning heavy triggers a burst. A dead sensor shows NO DATA / NO WAZE instead of a stuck Loading screen.",
+  "author": "ant456",
+  "entry_point": "manager.py",
+  "class_name": "WazeTravelPlugin",
+  "category": "utility",
+  "display_modes": ["waze_travel"],
+  "update_interval": 120,
+  "config_schema": "config_schema.json",
+  "versions": [
+    {
+      "version": "2.0.0",
+      "released": "2026-10-28",
+      "ledmatrix_min": "2.0.0",
+      "notes": "Arcade redesign. Reads the sensor state as the minutes (older HA: the duration attribute). Honest NO DATA / OFFLINE screens, free-flow memory, traffic alerts, non-blocking refresh."
+    },
+    {
+      "version": "1.0.0",
+      "released": "2026-06-20",
+      "ledmatrix_min": "2.0.0"
+    }
+  ]
+}

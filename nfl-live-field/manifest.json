@@ -1,0 +1,102 @@
+{
+  "id": "nfl-live-field",
+  "name": "NFL Live Field",
+  "version": "1.2.4",
+  "author": "ant456",
+  "description": "An arcade-style NFL show with three modes: live games (animated field, player cards with ESPN headshots and rarity frames, touchdown bursts with confetti), recently finished games (final score plus the same stat cards), and upcoming games (matchup and kickoff time). Pick favorite teams and switch on the favorites lock to show only their games in every mode. ESPN's public scoreboard, no API key.",
+  "entry_point": "manager.py",
+  "class_name": "NflLiveFieldPlugin",
+  "category": "sports",
+  "tags": [
+    "nfl",
+    "football",
+    "live",
+    "scoreboard",
+    "favorites",
+    "arcade",
+    "player-cards",
+    "schedule"
+  ],
+  "icon": "fas fa-football",
+  "display_modes": [
+    "nfl_live",
+    "nfl_recent",
+    "nfl_upcoming"
+  ],
+  "update_interval": 600,
+  "default_duration": 20,
+  "config_schema": "config_schema.json",
+  "requirements_file": "requirements.txt",
+  "compatible_versions": [
+    ">=3.0.0"
+  ],
+  "versions": [
+    {
+      "version": "1.2.4",
+      "released": "2026-10-26",
+      "ledmatrix_min_version": "3.0.0",
+      "notes": "Fixed: drive arrows on the field were drawn mirrored (they marched the right way but pointed backwards). Stats: leaders are now also read from the competition-level list when ESPN does not put them on each team, routed to the right team by id, so player cards and the final-game stat ticker no longer come up empty in that case."
+    },
+    {
+      "version": "1.2.3",
+      "released": "2026-10-26",
+      "ledmatrix_min_version": "3.0.0",
+      "notes": "Fixed: the upcoming-game screen showed every kickoff as a bare date ('10/26 9:27 PM') because it was given the animation clock as 'now'. It now reads TODAY 9:27 PM, TMRW 1:00 PM, SUN 1:00 PM by calendar day (a game 13 hours away but tomorrow is TMRW, not a weekday)."
+    },
+    {
+      "version": "1.2.2",
+      "released": "2026-10-22",
+      "ledmatrix_min_version": "3.0.0",
+      "notes": "Fixed: one failed player-photo download no longer aborts the rest of the batch (later players never loaded in test mode and live). Failures are now logged at warning level. Test mode with headshot_downloads on now fetches real ESPN photos instead of drawing synthetic faces. Fixed the demo id for Jalen Hurts."
+    },
+    {
+      "version": "1.2.1",
+      "released": "2026-10-02",
+      "ledmatrix_min_version": "3.0.0",
+      "notes": "Fixed: a real ESPN scoreboard fetch confirmed each team's stat leader is named 'passingLeader'/'rushingLeader'/'receivingLeader', not 'passingYards'/'rushingYards'/'receivingYards' as the parser expected -- so on real games, every team's leaders were silently dropped and no player cards or recap-panel stats ever had data to show. Both name forms are now accepted. The demo/test-mode data also now uses the real names, so this class of bug shows up in testing instead of only in production."
+    },
+    {
+      "version": "1.2.0",
+      "released": "2026-09-28",
+      "ledmatrix_min_version": "3.0.0",
+      "notes": "Recent (final) games no longer show the empty football field -- that space now holds an animated stat ticker of the game's top leaders: a staggered count-up per row and a spotlight that cycles between rows. Live games are unaffected (the field still shows there). Falls back to a plain message when a final game has no leaders data."
+    },
+    {
+      "version": "1.1.0",
+      "released": "2026-09-27",
+      "ledmatrix_min_version": "3.0.0",
+      "notes": "Adds recent (final-score) and upcoming (matchup preview) games as their own display modes, nfl_recent and nfl_upcoming, sharing the same ESPN scoreboard fetch as live -- no extra network calls. Recent games get the same player cards live games do. Selection uses the repo's usual other_*_games_to_show / other_rotation_interval_seconds / favorite_rotation_boost settings, and the favorites lock now applies to all three modes."
+    }
+  ],
+  "requires": {
+    "python": ">=3.9",
+    "display_size": {
+      "min_width": 64,
+      "min_height": 32
+    }
+  },
+  "display": {
+    "design_size": {
+      "width": 128,
+      "height": 64
+    }
+  },
+  "api_requirements": [
+    {
+      "name": "ESPN API",
+      "required": true,
+      "description": "ESPN's public NFL scoreboard (scores, situation and per-team leaders) and ESPN player headshots. No API key.",
+      "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+    }
+  ],
+  "stars": 0,
+  "downloads": 0,
+  "verified": false,
+  "screenshot": "",
+  "license": "GPL-3.0",
+  "last_updated": "2026-10-26",
+  "assets": {
+    "uses_core_assets": true,
+    "nfl_logos": "assets/sports/nfl_logos/"
+  }
+}

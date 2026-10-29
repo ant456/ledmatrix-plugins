@@ -1,0 +1,160 @@
+{
+ "1781818586045": {
+  "id": "1781818586045",
+  "alias": "Smoke Alarm — LED Matrix Alert On",
+  "description": "Critical alert on the LED matrix sign while any smoke alarm is on. Repeats every 30s until they clear (max 2h). Names every detector that is on.",
+  "triggers": [
+   {
+    "trigger": "state",
+    "entity_id": [
+     "binary_sensor.avas_room_alarm_status",
+     "binary_sensor.basement_alarm_status",
+     "binary_sensor.dining_room_alarm_status",
+     "binary_sensor.upstairs_hall_alarm_status",
+     "binary_sensor.smoke_alarm_alarm_status"
+    ],
+    "to": "on"
+   }
+  ],
+  "conditions": [],
+  "actions": [
+   {
+    "repeat": {
+     "sequence": [
+      {
+       "action": "mqtt.publish",
+       "data": {
+        "topic": "ledmatrix/notify",
+        "payload": "{% set on = [\"binary_sensor.avas_room_alarm_status\", \"binary_sensor.basement_alarm_status\", \"binary_sensor.dining_room_alarm_status\", \"binary_sensor.upstairs_hall_alarm_status\", \"binary_sensor.smoke_alarm_alarm_status\"] | select(\"is_state\",\"on\") | map(\"state_attr\",\"friendly_name\") | map(\"replace\",\" Alarm Status\",\"\") | list %}{{ {\"title\":\"FIRE ALARM\",\"message\":(\"SMOKE: \" ~ (on | join(\" + \"))) if on else \"SMOKE ALARM - CHECK THE HOUSE\",\"severity\":\"critical\",\"icon_name\":\"lametric:7756\",\"ttl\":60} | to_json }}"
+       }
+      },
+      {
+       "delay": {
+        "seconds": 30
+       }
+      }
+     ],
+     "until": [
+      {
+       "condition": "template",
+       "value_template": "{{ [\"binary_sensor.avas_room_alarm_status\", \"binary_sensor.basement_alarm_status\", \"binary_sensor.dining_room_alarm_status\", \"binary_sensor.upstairs_hall_alarm_status\", \"binary_sensor.smoke_alarm_alarm_status\"] | select(\"is_state\",\"on\") | list | count == 0 or repeat.index >= 240 }}"
+      }
+     ]
+    }
+   }
+  ],
+  "mode": "single",
+  "max_exceeded": "silent"
+ },
+ "1781818617226": {
+  "id": "1781818617226",
+  "alias": "Smoke Alarm — LED Matrix Alert Off",
+  "description": "All clear on the LED matrix sign once every smoke alarm has gone from on to off (not on reconnects).",
+  "triggers": [
+   {
+    "trigger": "state",
+    "entity_id": [
+     "binary_sensor.avas_room_alarm_status",
+     "binary_sensor.basement_alarm_status",
+     "binary_sensor.dining_room_alarm_status",
+     "binary_sensor.upstairs_hall_alarm_status",
+     "binary_sensor.smoke_alarm_alarm_status"
+    ],
+    "from": "on",
+    "to": "off"
+   }
+  ],
+  "conditions": [
+   {
+    "condition": "state",
+    "entity_id": "binary_sensor.avas_room_alarm_status",
+    "state": "off"
+   },
+   {
+    "condition": "state",
+    "entity_id": "binary_sensor.basement_alarm_status",
+    "state": "off"
+   },
+   {
+    "condition": "state",
+    "entity_id": "binary_sensor.dining_room_alarm_status",
+    "state": "off"
+   },
+   {
+    "condition": "state",
+    "entity_id": "binary_sensor.upstairs_hall_alarm_status",
+    "state": "off"
+   },
+   {
+    "condition": "state",
+    "entity_id": "binary_sensor.smoke_alarm_alarm_status",
+    "state": "off"
+   }
+  ],
+  "actions": [
+   {
+    "action": "mqtt.publish",
+    "data": {
+     "topic": "ledmatrix/notify",
+     "payload": "{\"title\": \"All Clear\", \"message\": \"Smoke alarms clear\", \"severity\": \"info\", \"icon_name\": \"lametric:9171\", \"ttl\": 60}"
+    }
+   }
+  ],
+  "mode": "single"
+ },
+ "smoke_co_led_matrix_alert": {
+  "id": "smoke_co_led_matrix_alert",
+  "alias": "Carbon Monoxide — LED Matrix Alert",
+  "description": "Critical alert on the LED matrix sign when a CO sensor reads over 35 ppm for a minute. Repeats every 30s until all are 10 ppm or lower (max 2h), then posts an all clear.",
+  "triggers": [
+   {
+    "trigger": "numeric_state",
+    "entity_id": [
+     "sensor.basement_carbon_monoxide",
+     "sensor.dining_room_carbon_monoxide",
+     "sensor.upstairs_hall_carbon_monoxide"
+    ],
+    "above": 35,
+    "for": {
+     "minutes": 1
+    }
+   }
+  ],
+  "conditions": [],
+  "actions": [
+   {
+    "repeat": {
+     "sequence": [
+      {
+       "action": "mqtt.publish",
+       "data": {
+        "topic": "ledmatrix/notify",
+        "payload": "{% set ns = namespace(items=[]) %}{% for e in [\"sensor.basement_carbon_monoxide\", \"sensor.dining_room_carbon_monoxide\", \"sensor.upstairs_hall_carbon_monoxide\"] %}{% if states(e) | float(0) > 35 %}{% set ns.items = ns.items + [state_attr(e,\"friendly_name\") | replace(\" CO Reading\",\"\") ~ \" \" ~ (states(e) | float(0) | round(0) | int) ~ \" PPM\"] %}{% endif %}{% endfor %}{{ {\"title\":\"CARBON MONOXIDE\",\"message\":(\"CO: \" ~ (ns.items | join(\" + \"))) if ns.items else \"CO ALARM - CHECK THE HOUSE\",\"severity\":\"critical\",\"icon_name\":\"warning\",\"ttl\":60} | to_json }}"
+       }
+      },
+      {
+       "delay": {
+        "seconds": 30
+       }
+      }
+     ],
+     "until": [
+      {
+       "condition": "template",
+       "value_template": "{{ [\"sensor.basement_carbon_monoxide\", \"sensor.dining_room_carbon_monoxide\", \"sensor.upstairs_hall_carbon_monoxide\"] | map(\"states\") | map(\"float\",0) | select(\">\",10) | list | count == 0 or repeat.index >= 240 }}"
+      }
+     ]
+    }
+   },
+   {
+    "action": "mqtt.publish",
+    "data": {
+     "topic": "ledmatrix/notify",
+     "payload": "{\"title\": \"All Clear\", \"message\": \"CO levels normal\", \"severity\": \"info\", \"icon_name\": \"check\", \"ttl\": 60}"
+    }
+   }
+  ],
+  "mode": "single",
+  "max_exceeded": "silent"
+ }
+}

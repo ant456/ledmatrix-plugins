@@ -1,0 +1,12 @@
+{
+  "print-monitor": {
+    "enabled": true,
+    "display_duration": 15,
+    "ha_url": "http://homeassistant.local:8123",
+    "ha_token": "YOUR-TOKEN-HERE",
+    "printer_prefix": "p1s_YOURSERIAL",
+    "interrupt": true,
+    "finished_hold_minutes": 30,
+    "show_idle": false
+  }
+}

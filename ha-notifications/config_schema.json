@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "display_duration": {
+      "type": "number",
+      "default": 15,
+      "minimum": 5
+    },
+    "max_queue": {
+      "type": "integer",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 50
+    },
+    "live_priority": {
+      "type": "boolean",
+      "default": true
+    },
+    "webhook_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable HTTP webhook server"
+    },
+    "webhook_port": {
+      "type": "integer",
+      "default": 5006,
+      "minimum": 1024,
+      "maximum": 65535
+    },
+    "webhook_secret": {
+      "type": "string",
+      "default": "",
+      "description": "X-Matrix-Token header value HA must send"
+    },
+    "mqtt_enabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable MQTT subscriber"
+    },
+    "mqtt_host": {
+      "type": "string",
+      "default": "localhost",
+      "description": "MQTT broker IP or hostname"
+    },
+    "mqtt_port": {
+      "type": "integer",
+      "default": 1883
+    },
+    "mqtt_topic": {
+      "type": "string",
+      "default": "ledmatrix/notify",
+      "description": "Topic to subscribe to"
+    },
+    "mqtt_username": {
+      "type": "string",
+      "default": ""
+    },
+    "mqtt_password": {
+      "type": "string",
+      "default": ""
+    },
+    "mqtt_client_id": {
+      "type": "string",
+      "default": "ledmatrix-ha-notifications"
+    },
+    "crawl_speed": {
+      "type": "integer",
+      "default": 45,
+      "minimum": 10,
+      "maximum": 200,
+      "description": "Pixels per second a long message crawls"
+    },
+    "min_seconds": {
+      "type": "integer",
+      "default": 6,
+      "minimum": 3,
+      "description": "Shortest time a notification stays after its splash"
+    },
+    "max_seconds": {
+      "type": "integer",
+      "default": 25,
+      "minimum": 5,
+      "description": "Longest a notification stays, however long the message"
+    },
+    "splash": {
+      "type": "boolean",
+      "default": true,
+      "description": "Arrival splash (ALERT!, WARNING!, ...)"
+    },
+    "message_font": {
+      "type": "string",
+      "default": "9x15B",
+      "enum": [
+        "9x15B",
+        "8x13B",
+        "7x13B",
+        "6x10"
+      ],
+      "description": "Face for the message (BDF from assets/fonts)"
+    }
+  }
+}

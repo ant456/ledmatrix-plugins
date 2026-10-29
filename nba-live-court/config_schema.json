@@ -1,0 +1,364 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NBA Live Court Configuration",
+  "description": "An arcade-style live NBA show: a hardwood court with quarter scores, collectible player cards with photos and stats, and bursts for big runs and late lead changes, optionally locked to your favorite teams. No API key needed.",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^favorite_teams_data$": {}
+  },
+  "required": [
+    "enabled"
+  ],
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable NBA Live Court"
+    },
+    "favorite_teams": {
+      "type": "array",
+      "title": "Favorite Teams",
+      "description": "Select your favorite NBA teams. Their games come first and get extra turns, and their players' cards lead. Turn on 'Lock to favorites' to show only their games.",
+      "items": {
+        "type": "string",
+        "enum": [
+          "ATL",
+          "BKN",
+          "BOS",
+          "CHA",
+          "CHI",
+          "CLE",
+          "DAL",
+          "DEN",
+          "DET",
+          "GS",
+          "HOU",
+          "IND",
+          "LAC",
+          "LAL",
+          "MEM",
+          "MIA",
+          "MIL",
+          "MIN",
+          "NO",
+          "NY",
+          "OKC",
+          "ORL",
+          "PHI",
+          "PHX",
+          "POR",
+          "SA",
+          "SAC",
+          "TOR",
+          "UTAH",
+          "WSH"
+        ]
+      },
+      "default": [],
+      "uniqueItems": true,
+      "x-widget": "checkbox-group",
+      "x-options": {
+        "labels": {
+          "ATL": "Atlanta Hawks",
+          "BKN": "Brooklyn Nets",
+          "BOS": "Boston Celtics",
+          "CHA": "Charlotte Hornets",
+          "CHI": "Chicago Bulls",
+          "CLE": "Cleveland Cavaliers",
+          "DAL": "Dallas Mavericks",
+          "DEN": "Denver Nuggets",
+          "DET": "Detroit Pistons",
+          "GS": "Golden State Warriors",
+          "HOU": "Houston Rockets",
+          "IND": "Indiana Pacers",
+          "LAC": "LA Clippers",
+          "LAL": "Los Angeles Lakers",
+          "MEM": "Memphis Grizzlies",
+          "MIA": "Miami Heat",
+          "MIL": "Milwaukee Bucks",
+          "MIN": "Minnesota Timberwolves",
+          "NO": "New Orleans Pelicans",
+          "NY": "New York Knicks",
+          "OKC": "Oklahoma City Thunder",
+          "ORL": "Orlando Magic",
+          "PHI": "Philadelphia 76ers",
+          "PHX": "Phoenix Suns",
+          "POR": "Portland Trail Blazers",
+          "SA": "San Antonio Spurs",
+          "SAC": "Sacramento Kings",
+          "TOR": "Toronto Raptors",
+          "UTAH": "Utah Jazz",
+          "WSH": "Washington Wizards"
+        }
+      }
+    },
+    "lock_to_favorites": {
+      "type": "boolean",
+      "default": false,
+      "description": "Favorites lock: show ONLY live games that involve one of your favorite teams. Off shows favorites first, then every other live game. With no favorite teams selected there is nothing to lock to, so every live game shows"
+    },
+    "lock_fallback_to_all": {
+      "type": "boolean",
+      "default": false,
+      "description": "When the lock is on and none of your teams is playing, show the other live games until yours kick off (off = show nothing and let the display move on)"
+    },
+    "live_game_duration": {
+      "type": "integer",
+      "default": 12,
+      "minimum": 5,
+      "maximum": 120,
+      "description": "Seconds the animated court screen stays up for each live game"
+    },
+    "cards_per_game": {
+      "type": "integer",
+      "default": 2,
+      "minimum": 0,
+      "maximum": 4,
+      "description": "Player cards after each game's court screen: the game's best performers (points, rebounds, assists leaders), your favorites' players first. 0 turns the cards off"
+    },
+    "card_seconds": {
+      "type": "integer",
+      "default": 6,
+      "minimum": 3,
+      "maximum": 30,
+      "description": "Seconds each player card stays up"
+    },
+    "favorite_live_boost": {
+      "type": "integer",
+      "default": 2,
+      "minimum": 1,
+      "maximum": 5,
+      "description": "Turns your favorites' games get for every 1 turn other live games get (ignored when the lock is on). 1 = even rotation"
+    },
+    "live_priority": {
+      "type": "boolean",
+      "default": true,
+      "description": "Let live games take over the rotation while they are on"
+    },
+    "show_headshots": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show ESPN player photos on the cards and bursts. When off, cards show a team-colour silhouette with the jersey number"
+    },
+    "score_alerts": {
+      "type": "boolean",
+      "default": true,
+      "description": "Interrupt the rotation with a burst (sunburst, confetti) when a team goes on a big run or takes the lead late in the fourth quarter or overtime",
+      "title": "Big-play bursts"
+    },
+    "alert_min_points": {
+      "type": "integer",
+      "title": "Big-run size",
+      "default": 8,
+      "minimum": 0,
+      "maximum": 40,
+      "description": "How many points a team must outscore the other by between two updates (about 30 seconds) to trigger a burst. 0 turns run bursts off (late lead changes still fire). Lower = more bursts.",
+      "x-advanced": true
+    },
+    "show_recent": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show recently finished games (final score, with the same player cards) in their own rotation"
+    },
+    "recent_game_duration": {
+      "type": "integer",
+      "default": 10,
+      "minimum": 5,
+      "maximum": 120,
+      "description": "Seconds on the final-score screen for each recent game"
+    },
+    "recent_cards_per_game": {
+      "type": "integer",
+      "default": 1,
+      "minimum": 0,
+      "maximum": 4,
+      "description": "Player cards after each recent game's final score (0 = none)"
+    },
+    "show_upcoming": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show games that haven't tipped off yet: matchup, records, tip-off time and spread, in their own rotation"
+    },
+    "upcoming_game_duration": {
+      "type": "integer",
+      "default": 8,
+      "minimum": 5,
+      "maximum": 60,
+      "description": "Seconds on each upcoming game's preview screen"
+    },
+    "game_limits": {
+      "type": "object",
+      "title": "Recent / upcoming game limits",
+      "additionalProperties": false,
+      "description": "How many recent and upcoming games to show, and how favorites are weighted among them. Matches the selection settings the repo's other scoreboards use.",
+      "properties": {
+        "recent_games_to_show": {
+          "type": "integer",
+          "default": 2,
+          "minimum": 0,
+          "maximum": 20,
+          "description": "Your favorite teams' recent games to include"
+        },
+        "upcoming_games_to_show": {
+          "type": "integer",
+          "default": 2,
+          "minimum": 0,
+          "maximum": 20,
+          "description": "Your favorite teams' upcoming games to include"
+        },
+        "other_recent_games_to_show": {
+          "type": "integer",
+          "default": 1,
+          "minimum": 0,
+          "maximum": 20,
+          "description": "Non-favorite recent games to include, from a slice that rotates over time"
+        },
+        "other_upcoming_games_to_show": {
+          "type": "integer",
+          "default": 1,
+          "minimum": 0,
+          "maximum": 20,
+          "description": "Non-favorite upcoming games to include, from a slice that rotates over time"
+        },
+        "other_rotation_interval_seconds": {
+          "type": "integer",
+          "default": 1800,
+          "minimum": 0,
+          "maximum": 86400,
+          "description": "How often the non-favorite slice advances to the next games in the schedule"
+        },
+        "favorite_rotation_boost": {
+          "type": "integer",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Turns a favorite's recent/upcoming game gets per 1 turn of another game"
+        }
+      }
+    },
+    "spoiler_delay_seconds": {
+      "type": "integer",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 300,
+      "description": "Hold scores, cards and bursts back this many seconds, for watching on a delayed stream"
+    },
+    "exclude_teams": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "ARI",
+          "ATL",
+          "BAL",
+          "BUF",
+          "CAR",
+          "CHI",
+          "CIN",
+          "CLE",
+          "DAL",
+          "DEN",
+          "DET",
+          "GB",
+          "HOU",
+          "IND",
+          "JAX",
+          "KC",
+          "LAC",
+          "LAR",
+          "LV",
+          "MIA",
+          "MIN",
+          "NE",
+          "NO",
+          "NYG",
+          "NYJ",
+          "PHI",
+          "PIT",
+          "SEA",
+          "SF",
+          "TB",
+          "TEN",
+          "WSH"
+        ]
+      },
+      "default": [],
+      "uniqueItems": true,
+      "x-advanced": true,
+      "description": "Teams to always hide from the live rotation (spoiler protection when you watch on a delay). Beats every other setting, including the favorites lock"
+    },
+    "celebrate_all_teams": {
+      "type": "boolean",
+      "default": false,
+      "description": "Also show the burst when any other team makes a big run, not just favorites",
+      "x-advanced": true
+    },
+    "display_duration": {
+      "type": "number",
+      "default": 20,
+      "minimum": 5,
+      "maximum": 300,
+      "description": "Seconds for the mode when nothing is live"
+    },
+    "advanced": {
+      "type": "object",
+      "title": "Advanced",
+      "x-advanced": true,
+      "additionalProperties": false,
+      "description": "Polling, animation and testing settings",
+      "properties": {
+        "live_poll_seconds": {
+          "type": "integer",
+          "default": 30,
+          "minimum": 10,
+          "maximum": 300,
+          "description": "Seconds between score refreshes while a game is live"
+        },
+        "idle_poll_seconds": {
+          "type": "integer",
+          "default": 600,
+          "minimum": 60,
+          "maximum": 21600,
+          "description": "Seconds between refreshes when no game is live"
+        },
+        "request_timeout": {
+          "type": "integer",
+          "default": 10,
+          "minimum": 3,
+          "maximum": 60,
+          "description": "Seconds to wait for ESPN before giving up"
+        },
+        "alert_seconds": {
+          "type": "integer",
+          "default": 8,
+          "minimum": 3,
+          "maximum": 30,
+          "description": "How long each burst stays up"
+        },
+        "animations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Animate the screens (count-up, bar fills, foil shimmer, marching drive arrows, confetti). Off draws each screen once, which is lighter on an older Pi"
+        },
+        "animation_fps": {
+          "type": "integer",
+          "default": 30,
+          "minimum": 5,
+          "maximum": 60,
+          "description": "Frames per second for the animations"
+        },
+        "headshot_downloads": {
+          "type": "boolean",
+          "default": true,
+          "description": "Download player photos from ESPN. Off uses only photos already saved"
+        },
+        "test_mode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show made-up live games (with made-up players, photos, a big run and a lead change every few updates) instead of real data, to try the look and the favorites lock offline"
+        }
+      }
+    }
+  }
+}

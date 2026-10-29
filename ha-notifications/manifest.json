@@ -1,0 +1,44 @@
+{
+  "id": "ha-notifications",
+  "name": "HA Notifications",
+  "version": "2.0.0",
+  "description": "Home Assistant notifications on the panel in the NBA / NFL / NHL Live arcade style: a splash on arrival (ALERT!, WARNING!, SUCCESS!), then a card with the icon and the message in big letters that crawls once so it is always read in full. Critical alerts blink a red border. Webhook and MQTT, named pixel icons and LaMetric icons, and an ALL QUIET idle screen. No header or footer bars.",
+  "author": "Custom",
+  "entry_point": "manager.py",
+  "class_name": "HANotificationsPlugin",
+  "display_modes": [
+    "ha_notifications"
+  ],
+  "update_interval": 1,
+  "versions": [
+    {
+      "version": "2.0.0",
+      "released": "2026-10-28",
+      "ledmatrix_min": "2.0.0",
+      "changes": "Arcade redesign: arrival splash, icon tile with severity gradient, big crawling message on a full-height row (no header or footer), blinking critical border, ALL QUIET idle screen, /frame.png preview. Timing now follows the clock instead of per-call counters. Payloads, webhook, MQTT and icons are unchanged."
+    },
+    {
+      "version": "1.2.0",
+      "released": "2026-08-10",
+      "ledmatrix_min": "2.0.0",
+      "changes": "New notifications now force an immediate on-demand display switch via display_controller's request cache, instead of relying on the passive live-priority check (which the controller skips entirely whenever another mode is already pinned on-demand). Fixes notifications sometimes taking a while to appear."
+    },
+    {
+      "version": "1.1.1",
+      "released": "2026-08-09",
+      "ledmatrix_min": "2.0.0",
+      "changes": "New notifications now immediately preempt whatever is currently showing instead of waiting in FIFO order behind it — fixes delayed/stale display on rapid state changes (e.g. a light toggled on then off)"
+    },
+    {
+      "version": "1.1.0",
+      "released": "2026-08-09",
+      "ledmatrix_min": "2.0.0",
+      "changes": "Added light icon; added full-color and animated GIF icon support via LaMetric icon gallery IDs (icon_name: lametric:<id>)"
+    },
+    {
+      "version": "1.0.0",
+      "released": "2026-06-02",
+      "ledmatrix_min": "2.0.0"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "ha-notifications": {
+    "enabled": true,
+    "display_duration": 15,
+    "crawl_speed": 45,
+    "splash": true,
+    "max_queue": 10,
+    "live_priority": true,
+
+    "webhook_enabled": true,
+    "webhook_port": 5006,
+    "webhook_secret": "your-secret-token-here",
+
+    "mqtt_enabled": true,
+    "mqtt_host": "192.168.0.x",
+    "mqtt_port": 1883,
+    "mqtt_topic": "ledmatrix/notify",
+    "mqtt_username": "",
+    "mqtt_password": ""
+  }
+}

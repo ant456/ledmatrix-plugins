@@ -1,0 +1,162 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "display_duration": {
+      "type": "number",
+      "default": 12,
+      "description": "Seconds on screen when playing without a banner"
+    },
+    "live_priority": {
+      "type": "boolean",
+      "default": true,
+      "description": "Take over the display whenever something is playing"
+    },
+    "update_interval": {
+      "type": "integer",
+      "default": 3
+    },
+    "ha_url": {
+      "type": "string",
+      "description": "Home Assistant URL, e.g. http://homeassistant.local:8123"
+    },
+    "ha_token": {
+      "type": "string",
+      "description": "HA long-lived access token"
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "media_player entity ids in priority order (Shield, music players, native Plex entity ...)"
+    },
+    "entity_services": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {},
+      "description": "Players that report no app_name: {\"media_player.x\": \"spotify\"}. Keys: plex, netflix, youtube, youtube_tv, youtube_music, disney, spotify, hulu, prime, max"
+    },
+    "tmdb_services": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "plex"
+      ],
+      "description": "Services whose titles are looked up on TMDB for banners. Keep this to plex."
+    },
+    "tmdb_token": {
+      "type": "string",
+      "description": "TMDB API Read Access Token (starts with eyJ), NOT the v3 key"
+    },
+    "fanart_api_key": {
+      "type": "string",
+      "description": "Fanart.tv API key"
+    },
+    "plex_url": {
+      "type": "string",
+      "description": "Plex server URL, for the idle recently-added rotation"
+    },
+    "plex_token": {
+      "type": "string",
+      "description": "Plex token (X-Plex-Token)"
+    },
+    "poll_seconds": {
+      "type": "number",
+      "default": 4,
+      "minimum": 1
+    },
+    "banner_seconds": {
+      "type": "number",
+      "default": 12,
+      "minimum": 0,
+      "description": "Seconds of banner per cycle while playing"
+    },
+    "info_seconds": {
+      "type": "number",
+      "default": 8,
+      "minimum": 0,
+      "description": "Seconds of info card per cycle. 0 = banner only"
+    },
+    "rotation_duration": {
+      "type": "number",
+      "default": 30,
+      "description": "Idle: seconds per recently-added banner"
+    },
+    "auto_recent_count": {
+      "type": "integer",
+      "default": 20
+    },
+    "paused_timeout": {
+      "type": "number",
+      "default": 600,
+      "description": "Stop showing a paused player after this many seconds"
+    },
+    "scroll_px_per_sec": {
+      "type": "number",
+      "default": 22
+    },
+    "uppercase": {
+      "type": "boolean",
+      "default": true
+    },
+    "show_service_badge": {
+      "type": "boolean",
+      "default": true,
+      "description": "Small service icon next to the time when art replaces the big icon"
+    },
+    "banner_progress": {
+      "type": "boolean",
+      "default": true,
+      "description": "2px progress line along the bottom of the banner"
+    },
+    "font_path": {
+      "type": "string",
+      "default": "",
+      "description": "Override path to PressStart2P-Regular.ttf"
+    },
+    "portal_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Serve the web portal (live view, banner picker, icons and GIFs)"
+    },
+    "portal_port": {
+      "type": "integer",
+      "default": 5010,
+      "description": "Portal port. 5010 so it can run beside plex-marquee (5009) and now-playing (5008); use 5009 once plex-marquee is disabled"
+    },
+    "max_upload_mb": {
+      "type": "integer",
+      "default": 8,
+      "description": "Largest icon/GIF upload accepted by the portal"
+    },
+    "now_playing_burst": {
+      "type": "boolean",
+      "title": "NOW PLAYING Burst",
+      "description": "Show a short sunburst with the title when something new starts playing.",
+      "default": true
+    },
+    "title_font": {
+      "type": "string",
+      "title": "Title Font",
+      "description": "Font for the title on the info card. 7x13B is bold; 6x10 fits more text; MatrixChunky8 is compact; 3x5 is the blocky arcade font.",
+      "enum": [
+        "7x13B",
+        "8x13B",
+        "6x10",
+        "MatrixChunky8",
+        "3x5"
+      ],
+      "default": "7x13B"
+    }
+  }
+}

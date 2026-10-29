@@ -1,0 +1,79 @@
+{
+ "1781818586045": {
+  "id": "1781818586045",
+  "alias": "Smoke Alarm — LED Matrix Alert On",
+  "description": "Push a critical alert to the LED matrix sign when smoke is detected",
+  "triggers": [
+   {
+    "entity_id": [
+     "binary_sensor.avas_room_alarm_status",
+     "binary_sensor.basement_alarm_status",
+     "binary_sensor.dining_room_alarm_status",
+     "binary_sensor.upstairs_hall_alarm_status"
+    ],
+    "to": "on",
+    "trigger": "state"
+   }
+  ],
+  "conditions": [],
+  "actions": [
+   {
+    "data": {
+     "topic": "ledmatrix/notify",
+     "payload": "{\"title\": \"FIRE ALARM\", \"message\": \"Smoke detected — {{ trigger.to_state.attributes.friendly_name }}\", \"severity\": \"critical\", \"icon_name\": \"lametric:7756\"}"
+    },
+    "action": "mqtt.publish"
+   }
+  ],
+  "mode": "single"
+ },
+ "1781818617226": {
+  "id": "1781818617226",
+  "alias": "Smoke Alarm — LED Matrix Alert Off",
+  "description": "Clear the LED matrix sign once all smoke alarms have cleared",
+  "triggers": [
+   {
+    "entity_id": [
+     "binary_sensor.avas_room_alarm_status",
+     "binary_sensor.basement_alarm_status",
+     "binary_sensor.dining_room_alarm_status",
+     "binary_sensor.upstairs_hall_alarm_status"
+    ],
+    "to": "off",
+    "trigger": "state"
+   }
+  ],
+  "conditions": [
+   {
+    "condition": "state",
+    "entity_id": "binary_sensor.avas_room_alarm_status",
+    "state": "off"
+   },
+   {
+    "condition": "state",
+    "entity_id": "binary_sensor.basement_alarm_status",
+    "state": "off"
+   },
+   {
+    "condition": "state",
+    "entity_id": "binary_sensor.dining_room_alarm_status",
+    "state": "off"
+   },
+   {
+    "condition": "state",
+    "entity_id": "binary_sensor.upstairs_hall_alarm_status",
+    "state": "off"
+   }
+  ],
+  "actions": [
+   {
+    "data": {
+     "topic": "ledmatrix/notify",
+     "payload": "{\"title\": \"All Clear\", \"message\": \"Smoke alarms clear\", \"severity\": \"info\", \"icon_name\": \"lametric:9171\"}"
+    },
+    "action": "mqtt.publish"
+   }
+  ],
+  "mode": "single"
+ }
+}

@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+config.json
+*.bak*
+cache/
+.claude/
+CLAUDE.md
