@@ -1,6 +1,6 @@
 # LEDMatrix arcade plugins
 
-Eleven plugins for a 128x32 RGB [LEDMatrix](https://github.com/ChuckBuilds/LEDMatrix) panel, all drawn in the same arcade style: big pixel type, status gradients, bursts and confetti. Each folder is a self-contained plugin. Copy it to `~/LEDMatrix/plugin-repos/<name>`, add its block to `config/config.json`, and restart.
+Twelve plugins for a 128x32 RGB [LEDMatrix](https://github.com/ChuckBuilds/LEDMatrix) panel, all drawn in the same arcade style: big pixel type, status gradients, bursts and confetti. Each folder is a self-contained plugin. Copy it to `~/LEDMatrix/plugin-repos/<name>`, add its block to `config/config.json`, and restart.
 
 Every screenshot below is a real frame from the plugin's own renderer.
 
@@ -73,6 +73,16 @@ The backdrop is the actual sky over your house. It runs from deep night through 
 <p align="center"><img src="sky-weather/screenshots/01-day-in-the-sky.png" width="640" alt="sky-weather"></p>
 
 [Details and more screenshots](sky-weather/)
+
+## [lumen-clock](lumen-clock/)
+
+**A clock made to be looked at: soft glowing digits over aurora, tide, neon, real sky and a sweeping dial.**
+
+The time is set in large, smooth digits that roll over when they change: the old digit slides up and fades while the new one rises from below. Behind it, five scenes take turns, one each time the clock comes round in your rotation. Northern lights flow in three drifting curtains over twinkling stars. Water rises with the seconds and drains at the top of the minute. Neon tubes glow on a brick wall while a comet circles the panel once a minute. And the real sky for your location rolls from night through dawn, day, golden hour and dusk, with the sun on its arc and the Moon in its true phase.
+
+<p align="center"><img src="lumen-clock/screenshots/01-five-scenes.png" width="640" alt="lumen-clock"></p>
+
+[Details and more screenshots](lumen-clock/)
 
 ## [hot-tub](hot-tub/)
 

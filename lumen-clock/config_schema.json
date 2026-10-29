@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "enabled":          { "type": "boolean", "default": true },
+    "display_duration": { "type": "integer", "default": 20, "minimum": 8, "description": "Seconds on the panel per appearance; each appearance shows the next scene" },
+    "style":            { "type": "string", "enum": ["cycle", "aurora", "tide", "neon", "daylight", "orbit"], "default": "cycle", "description": "cycle = a different scene each time the clock comes round; or pin one scene" },
+    "scenes":           { "type": "array", "items": { "type": "string", "enum": ["aurora", "tide", "neon", "daylight", "orbit"] }, "description": "Scenes to cycle through (default all five)" },
+    "time_format":      { "type": "string", "enum": ["12h", "24h"], "default": "12h" },
+    "show_seconds":     { "type": "boolean", "default": true, "description": "Show the seconds as light: a thread, a rising tide, a comet, a sweeping hand" },
+    "show_temperature": { "type": "boolean", "default": true, "description": "Outdoor temperature from the Home Assistant weather entity (needs ha_url and ha_token)" },
+    "fade_seconds":     { "type": "number", "default": 0.6, "minimum": 0, "maximum": 3, "description": "Each appearance fades up from black over this long" },
+    "timezone":         { "type": "string", "description": "e.g. America/New_York. Default: Home Assistant's, then the Pi's own" },
+    "ha_url":           { "type": "string", "description": "Home Assistant address; optional" },
+    "ha_token":         { "type": "string", "description": "HA long-lived access token; optional" },
+    "weather_entity":   { "type": "string", "default": "weather.openweathermap" },
+    "latitude":         { "type": "number", "description": "Where you are, for the Daylight scene (default: Home Assistant's)" },
+    "longitude":        { "type": "number" },
+    "test_mode":        { "type": "boolean", "default": false, "description": "Run time much faster and step through every scene so you can see a whole day. Turn off afterwards." },
+    "demo_speed":       { "type": "integer", "default": 90, "minimum": 1, "maximum": 600, "description": "test_mode: clock seconds per real second" }
+  }
+}

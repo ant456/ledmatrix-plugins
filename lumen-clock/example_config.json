@@ -1,0 +1,11 @@
+{
+  "lumen-clock": {
+    "enabled": true,
+    "display_duration": 20,
+    "style": "cycle",
+    "time_format": "12h",
+    "ha_url": "http://homeassistant.local:8123",
+    "ha_token": "YOUR-TOKEN-HERE",
+    "weather_entity": "weather.openweathermap"
+  }
+}

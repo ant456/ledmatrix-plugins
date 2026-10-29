@@ -1,0 +1,26 @@
+{
+  "id": "lumen-clock",
+  "name": "Lumen Clock",
+  "version": "1.0.0",
+  "description": "A clock made to be looked at: large soft digits that roll over when they change, over five scenes that take turns. Aurora (northern lights), Tide (water that rises with the seconds), Neon (glowing tubes with a comet circling the panel each minute), Daylight (the real sky and the Moon's true phase for your location) and Orbit (a smooth analog dial beside the digital time). Weekday, date and the outdoor temperature from Home Assistant sit in a quiet column.",
+  "author": "ant456",
+  "entry_point": "manager.py",
+  "class_name": "LumenClockPlugin",
+  "category": "time",
+  "tags": ["clock", "time", "aurora", "neon", "sunrise", "moon"],
+  "icon": "fas fa-clock",
+  "display_modes": ["lumen_clock"],
+  "update_interval": 60,
+  "default_duration": 20,
+  "config_schema": "config_schema.json",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "released": "2026-10-29",
+      "ledmatrix_min": "2.0.0",
+      "notes": "First release: aurora, tide, neon, daylight and orbit scenes, rolling digits, optional outdoor temperature and location from Home Assistant, test_mode that runs time faster."
+    }
+  ],
+  "requires": {"python": ">=3.9", "display_size": {"min_width": 128, "min_height": 32}},
+  "license": "GPL-3.0"
+}
