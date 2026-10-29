@@ -256,6 +256,26 @@ def _field(img: Image.Image, x: int, y: int, w: int, h: int, game: Dict[str, Any
         d.flame(img, fx0 + max(0, (ez - 6) // 2), y + 1, flicker=animate and int(t * 6) % 2 == 0)
 
 
+#: what each recap row is counting (a running back can lead in receiving, so the position alone is not enough)
+RECAP_TAGS = {"pass": "PA", "rush": "RU", "rec": "RE"}
+RECAP_TAG_POS = {"pass": "QB", "rush": "RB", "rec": "WR"}
+
+
+def _recap_picks(game: Dict[str, Any], stars: List[Dict[str, Any]], rows: int) -> List[Dict[str, Any]]:
+    """The recap rows: each team's best performer (away first, as in the score rows), then the next best."""
+    picks: List[Dict[str, Any]] = []
+    for side in ("away", "home"):
+        mine = [p for p in stars if p.get("team") == game[side]["abbr"]]
+        if mine:
+            picks.append(mine[0])
+    for p in stars:
+        if len(picks) >= rows:
+            break
+        if p not in picks:
+            picks.append(p)
+    return picks[:rows]
+
+
 def _recap_panel(img: Image.Image, x: int, y: int, w: int, h: int, game: Dict[str, Any],
                  t: float, animate: bool) -> None:
     """Where the field would be on a finished game: an animated stat ticker of
@@ -263,14 +283,14 @@ def _recap_panel(img: Image.Image, x: int, y: int, w: int, h: int, game: Dict[st
     spotlight that cycles between rows so the panel keeps moving even once
     every number has landed.
     """
-    stars = [p for p in game.get("stars", []) if p.get("value", 0) > 0][:3]
+    stars = [p for p in game.get("stars", []) if p.get("value", 0) > 0]
     if w < 4 or h < 4:
         return
     if not stars:
         d.text(img, "NO STAT LEADERS", x + w // 2, y + max(0, h // 2 - 2), d.GRAY, 1, "center")
         return
     rows = max(1, min(len(stars), h // 10))
-    stars = stars[:rows]
+    stars = _recap_picks(game, stars, rows)
     row_h = h // rows
     cycle = 2.2
     active = int(t / cycle) % rows if animate else 0
@@ -283,19 +303,21 @@ def _recap_panel(img: Image.Image, x: int, y: int, w: int, h: int, game: Dict[st
         pulse = 0.5 + 0.5 * _sin(t * 2 * _pi / 1.0) if is_active else 0.0
         bg = d.mix(d.BLACK, d.scale(color, 0.5), (0.18 + 0.22 * pulse) * max(0.15, k))
         d.rect(img, x, ry, w, rh, bg)
-        d.rect(img, x, ry, 2, rh, d.scale(color, 0.4 + 0.6 * k))
+        team_bar = d.team_colors(team_dict(side_of(game, p['team'])))[0]
+        d.rect(img, x, ry, 2, rh, d.scale(team_bar, 0.5 + 0.5 * k))
         dx = int(round((1 - k) * 5))
         tx = x + 4 + dx
         avail = w - 6
         if rh >= 9 and avail - (tx - x) > 18:
-            tag_w = d.pos_tag(img, tx, ry + max(0, (rh - 7) // 2), p["pos"] or "?")
+            tag_w = d.tag(img, tx, ry + max(0, (rh - 7) // 2), RECAP_TAGS.get(p["category"], "YD"),
+                          d.POSITION_COLORS.get(RECAP_TAG_POS.get(p["category"], ""), d.GRAY))
             name_x = tx + tag_w + 2
         else:
             name_x = tx
         text_color = d.mix(d.BLACK, d.WHITE, min(1.0, k * 1.3))
-        name_w = max(6, avail - (name_x - x) - 20)
-        d.text(img, p["last"], name_x, ry + max(0, (rh - 5) // 2), text_color)
         shown = str(int(round(p["yards"] * min(1.0, k))))
+        name = font.fit(p["last"], max(6, avail - (name_x - x) - font.text_width(str(p["yards"])) - 3))
+        d.text(img, name, name_x, ry + max(0, (rh - 5) // 2), text_color)
         d.text(img, shown, x + w - 2, ry + max(0, (rh - 5) // 2), d.scale(color, 0.5 + 0.5 * k), 1, "right")
 
 

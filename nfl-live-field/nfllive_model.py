@@ -391,6 +391,27 @@ def parse_leaders(leaders: Any, team_abbr: str):
     return out
 
 
+def apply_summary_leaders(game: Dict[str, Any], summary: Any) -> bool:
+    """Give a finished game each team's own leaders, from ESPN's game summary.
+
+    The scoreboard sometimes lists only the game's top passer, rusher and
+    receiver, all on the winning side. The summary carries a list per team.
+    Returns True when any side was filled in."""
+    groups: Dict[str, Any] = {}
+    for entry in (summary or {}).get("leaders") or [] if isinstance(summary, dict) else []:
+        if isinstance(entry, dict):
+            groups[str((entry.get("team") or {}).get("id") or "")] = entry.get("leaders") or []
+    changed = False
+    for side in (game["home"], game["away"]):
+        got = groups.get(str(side.get("id")))
+        if got:
+            side["leaders"] = parse_leaders(got, side["abbr"])
+            changed = True
+    if changed:
+        game["stars"] = rank_stars(game["home"]["leaders"] + game["away"]["leaders"])
+    return changed
+
+
 def rank_stars(players):
     """Best performers first: rarity, then value."""
     return sorted(players, key=lambda p: (TIER_ORDER.index(p["tier"]), -p["value"], p["name"]))

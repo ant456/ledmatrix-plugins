@@ -313,3 +313,25 @@ def test_game_level_leaders_survive_junk():
     assert model.parse_event(ev)["stars"] == []
     comp["leaders"] = "nonsense"
     assert model.parse_event(ev)["stars"] == []
+
+
+def _entry(team_id, name, value, text):
+    return {"team": {"id": team_id}, "leaders": [{"name": name, "leaders": [{
+        "value": value, "displayValue": text,
+        "athlete": {"id": f"{team_id}{name}", "fullName": f"Test {name}", "position": {"abbreviation": "QB"}}}]}]}
+
+
+def test_summary_leaders_give_the_losing_team_a_player():
+    game = {"home": {"id": "21", "abbr": "PHI", "leaders": []}, "away": {"id": "6", "abbr": "DAL", "leaders": []}, "stars": []}
+    summary = {"leaders": [_entry("21", "passingYards", 211, "23/35, 211 YDS, 1 TD"),
+                           _entry("6", "passingYards", 212, "15/27, 212 YDS, 3 TD")]}
+    assert model.apply_summary_leaders(game, summary) is True
+    assert {p["team"] for p in game["stars"]} == {"PHI", "DAL"}
+    assert game["home"]["leaders"][0]["yards"] == 211
+
+
+def test_summary_leaders_ignore_junk():
+    game = {"home": {"id": "1", "abbr": "A", "leaders": []}, "away": {"id": "2", "abbr": "B", "leaders": []}, "stars": []}
+    assert model.apply_summary_leaders(game, None) is False
+    assert model.apply_summary_leaders(game, {"leaders": ["x", {"team": {"id": "9"}, "leaders": []}]}) is False
+    assert game["stars"] == []

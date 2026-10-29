@@ -229,6 +229,21 @@ def _linescore(img: Image.Image, x: int, y: int, w: int, game: Dict[str, Any], r
                    d.WHITE if current else d.scale(d.WHITE, 0.72), 1, "center")
 
 
+def _recap_picks(game: Dict[str, Any], stars: List[Dict[str, Any]], rows: int) -> List[Dict[str, Any]]:
+    """The recap rows: each team's best performer (away first, as in the score rows), then the next best."""
+    picks: List[Dict[str, Any]] = []
+    for side in ("away", "home"):
+        mine = [p for p in stars if p.get("team") == game[side]["abbr"]]
+        if mine:
+            picks.append(mine[0])
+    for p in stars:
+        if len(picks) >= rows:
+            break
+        if p not in picks:
+            picks.append(p)
+    return picks[:rows]
+
+
 def _recap_panel(img: Image.Image, x: int, y: int, w: int, h: int, game: Dict[str, Any],
                  t: float, animate: bool) -> None:
     """Where the scoreboard would be on a finished game: an animated stat ticker of
@@ -236,14 +251,14 @@ def _recap_panel(img: Image.Image, x: int, y: int, w: int, h: int, game: Dict[st
     spotlight that cycles between rows so the panel keeps moving even once
     every number has landed.
     """
-    stars = [p for p in game.get("stars", []) if p.get("value", 0) > 0][:3]
+    stars = [p for p in game.get("stars", []) if p.get("value", 0) > 0]
     if w < 4 or h < 4:
         return
     if not stars:
         d.text(img, "NO STAT LEADERS", x + w // 2, y + max(0, h // 2 - 2), d.GRAY, 1, "center")
         return
     rows = max(1, min(len(stars), h // 10))
-    stars = stars[:rows]
+    stars = _recap_picks(game, stars, rows)
     row_h = h // rows
     cycle = 2.2
     active = int(t / cycle) % rows if animate else 0
@@ -256,7 +271,8 @@ def _recap_panel(img: Image.Image, x: int, y: int, w: int, h: int, game: Dict[st
         pulse = 0.5 + 0.5 * _sin(t * 2 * _pi / 1.0) if is_active else 0.0
         bg = d.mix(d.BLACK, d.scale(color, 0.5), (0.18 + 0.22 * pulse) * max(0.15, k))
         d.rect(img, x, ry, w, rh, bg)
-        d.rect(img, x, ry, 2, rh, d.scale(color, 0.4 + 0.6 * k))
+        team_bar = d.team_colors(team_dict(side_of(game, p['team'])))[0]
+        d.rect(img, x, ry, 2, rh, d.scale(team_bar, 0.5 + 0.5 * k))
         dx = int(round((1 - k) * 5))
         tx = x + 4 + dx
         avail = w - 6

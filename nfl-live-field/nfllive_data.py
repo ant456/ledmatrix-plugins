@@ -14,6 +14,8 @@ import requests
 import nfllive_model as model
 
 ESPN_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+ESPN_SUMMARY_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary"
+SUMMARIES_PER_POLL = 4
 USER_AGENT = "LEDMatrix-NFLLiveField/1.0 (+https://github.com/ChuckBuilds/ledmatrix-plugins)"
 
 
@@ -67,7 +69,7 @@ class NflLiveData:
         now = time.time() if now is None else now
         cached = self._read()
         if cached and now - float(cached.get("fetched_at", 0)) < max_age:
-            return model.parse_scoreboard(cached["data"])
+            return self._with_summaries(model.parse_scoreboard(cached["data"]), now)
         try:
             response = self.session.get(ESPN_SCOREBOARD_URL, timeout=self.timeout)
             response.raise_for_status()
@@ -76,8 +78,43 @@ class NflLiveData:
                 raise ValueError("scoreboard was not a JSON object")
             self.cache.set(self._key, {"fetched_at": now, "data": payload})
             self.last_error = None
-            return model.parse_scoreboard(payload)
+            return self._with_summaries(model.parse_scoreboard(payload), now)
         except Exception as exc:
             self.last_error = f"{type(exc).__name__}: {exc}"
             self.logger.warning("NFL scoreboard fetch failed (%s); using last good copy", self.last_error)
-            return model.parse_scoreboard(cached["data"]) if cached else []
+            return self._with_summaries(model.parse_scoreboard(cached["data"]), now) if cached else []
+
+    # per-team leaders for finished games ------------------------------------
+    def _summary(self, game_id: str, now: float, fetch: bool) -> Optional[Dict[str, Any]]:
+        key = self.key("summary", game_id)
+        cached = self.read(key)
+        if cached and (cached["data"] or now - float(cached.get("fetched_at", 0)) < 600):
+            return cached["data"] or None       # an empty copy is a recent failure: don't retry yet
+        if not fetch:
+            return None
+        try:
+            response = self.session.get(ESPN_SUMMARY_URL, params={"event": game_id}, timeout=self.timeout)
+            response.raise_for_status()
+            payload = response.json()
+            data = payload if isinstance(payload, dict) and payload.get("leaders") else {}
+        except Exception as exc:  # noqa: BLE001 - the scoreboard's own leaders are the fallback
+            self.logger.debug("NFL summary %s failed: %s", game_id, exc)
+            data = {}
+        else:
+            if data:
+                data = {"leaders": data["leaders"]}
+        self.write(key, data, now)
+        return data or None
+
+    def _with_summaries(self, games: List[Dict[str, Any]], now: float) -> List[Dict[str, Any]]:
+        """Finished games where a team has no leaders get them from the game summary."""
+        budget = SUMMARIES_PER_POLL
+        for game in games:
+            if not game.get("final") or (game["home"]["leaders"] and game["away"]["leaders"]):
+                continue
+            summary = self._summary(game["id"], now, budget > 0)
+            if summary is not None:
+                model.apply_summary_leaders(game, summary)
+            elif budget > 0:
+                budget -= 1
+        return games
