@@ -665,26 +665,44 @@ def preview(ctx: RenderContext, item: Dict[str, Any], w: int, h: int, t: float) 
     tall = h >= 64
     narrow = w < 96
     half = w // 2
+    band_h = 9 if tall else 8
 
-    def side_block(x0, x1, side, color, accent, align_name_right):
+    def side_block(x0, x1, side, color, accent, outer_left):
         cw = x1 - x0
         d.vgrad(img, x0, 0, cw, h, d.scale(color, 0.22), (8, 9, 13))
         d.rect(img, x0, 0, cw, 3, color)
         abbr_scale = 3 if cw >= 46 and h >= 40 else 2 if cw >= 30 else 1
-        d.big_number(img, side["abbr"], x0 + cw // 2, h // 2 - font.text_height(abbr_scale) // 2, accent,
-                     abbr_scale, "center", shadow=False)
-        logo = ctx.logo(side["abbr"], min(cw - 4, 22), 16)
-        if logo is not None:
-            img.paste(logo, (x0 + (cw - logo.width) // 2, 4), logo)
+        ty = h // 2 - font.text_height(abbr_scale) // 2
+        if h >= 40:     # tall: the crest sits above the letters
+            d.big_number(img, side["abbr"], x0 + cw // 2, ty, accent, abbr_scale, "center", shadow=False)
+            logo = ctx.logo(side["abbr"], min(cw - 4, 22), 16)
+            if logo is not None:
+                img.paste(logo, (x0 + (cw - logo.width) // 2, 4), logo)
+        else:           # short: crest on the outer edge, letters toward the middle, never on top of each other
+            side_h = h - band_h - 3
+            logo = ctx.logo(side["abbr"], min(side_h - 2, 22), side_h - 2)
+            tw = font.text_width(side["abbr"], abbr_scale)
+            if logo is None:
+                d.big_number(img, side["abbr"], x0 + cw // 2, ty, accent, abbr_scale, "center", shadow=False)
+            else:
+                gap = 4
+                group = logo.width + gap + tw
+                gx = x0 + max(2, (cw - group) // 2)
+                ly = 3 + (side_h - logo.height) // 2
+                if outer_left:
+                    img.paste(logo, (gx, ly), logo)
+                    d.big_number(img, side["abbr"], gx + logo.width + gap, ty, accent, abbr_scale, "left", shadow=False)
+                else:
+                    d.big_number(img, side["abbr"], gx, ty, accent, abbr_scale, "left", shadow=False)
+                    img.paste(logo, (gx + tw + gap, ly), logo)
 
-    side_block(0, half, away, a_color, a_accent, False)
-    side_block(half, w, home, h_color, h_accent, True)
+    side_block(0, half, away, a_color, a_accent, True)
+    side_block(half, w, home, h_color, h_accent, False)
     at_text = "AT" if w >= 64 else "-"
     at_w = font.text_width(at_text) + 4
     d.rect(img, half - at_w // 2, h // 2 - 4, at_w, 8, d.BLACK)
     d.text(img, at_text, half, h // 2 - 2, d.GOLD, 1, "center")
 
-    band_h = 9 if tall else 8
     d.rect(img, 0, h - band_h, w, band_h, (10, 11, 16))
     d.hline(img, 0, h - band_h, w, (34, 38, 52))
     label = kickoff if font.text_width(kickoff) <= w - 4 else font.fit(kickoff, w - 4)
