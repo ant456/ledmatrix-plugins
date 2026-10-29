@@ -1,6 +1,6 @@
 # LEDMatrix arcade plugins
 
-Ten plugins for a 128x32 RGB [LEDMatrix](https://github.com/ChuckBuilds/LEDMatrix) panel, all drawn in the same arcade style: big pixel type, status gradients, bursts and confetti. Each folder is a self-contained plugin. Copy it to `~/LEDMatrix/plugin-repos/<name>`, add its block to `config/config.json`, and restart.
+Eleven plugins for a 128x32 RGB [LEDMatrix](https://github.com/ChuckBuilds/LEDMatrix) panel, all drawn in the same arcade style: big pixel type, status gradients, bursts and confetti. Each folder is a self-contained plugin. Copy it to `~/LEDMatrix/plugin-repos/<name>`, add its block to `config/config.json`, and restart.
 
 Every screenshot below is a real frame from the plugin's own renderer.
 
@@ -63,6 +63,16 @@ Front door locked? Smoke alarms quiet? Is everyone home? Four 32-pixel tiles ans
 <p align="center"><img src="house-hud/screenshots/01-security.png" width="640" alt="house-hud"></p>
 
 [Details and more screenshots](house-hud/)
+
+## [sky-weather](sky-weather/)
+
+**A weather display that follows the sky: real sunrises, sunsets and the Moon.**
+
+The backdrop is the actual sky over your house. It runs from deep night through a pink dawn, a blue day and an orange golden hour to a violet dusk, coloured by where the sun really is. The sun rides an arc between today's sunrise and sunset, and the Moon rides its own, with its true phase, its maria and the tilt it has from your latitude: an evening crescent leans toward the sunset.
+
+<p align="center"><img src="sky-weather/screenshots/01-day-in-the-sky.png" width="640" alt="sky-weather"></p>
+
+[Details and more screenshots](sky-weather/)
 
 ## [hot-tub](hot-tub/)
 
