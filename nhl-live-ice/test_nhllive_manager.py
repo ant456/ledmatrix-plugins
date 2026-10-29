@@ -598,8 +598,9 @@ def test_logo_setting_resolves_to_a_file(tmp_path):
     p = make()
     default = os.path.join(here, "logo.png")
     assert p._logo_file() == (default if os.path.exists(default) else "")      # nothing configured
-    q = make({"scoreboard_logo": "/home/pi/mine.png"})
-    assert q._logo_file() == "/home/pi/mine.png"
+    mine = str(tmp_path / "mine.png")                                          # absolute on any OS
+    q = make({"scoreboard_logo": mine})
+    assert q._logo_file() == mine
     r = make({"scoreboard_logo": "assets/mine.png"})
     assert r._logo_file() == os.path.join(here, "assets", "mine.png")           # relative: inside the plugin folder
     s = make({"scoreboard_logo": "~/mine.png"})
