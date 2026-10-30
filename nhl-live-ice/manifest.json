@@ -1,7 +1,7 @@
 {
   "id": "nhl-live-ice",
   "name": "NHL Live Ice",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "author": "ant456",
   "description": "An arcade-style NHL show with three modes: live games (an arena scoreboard with an LED-dot clock and period, shots on goal, a power-play lamp and your own logo, period scores, a flame on runs of unanswered goals, player cards with ESPN headshots and rarity frames, and a burst for every goal), recently finished games (final score plus the same stat cards), and upcoming games (matchup, records, puck drop and line). Pick favorite teams and switch on the favorites lock to show only their games in every mode. ESPN's public scoreboard, no API key.",
   "entry_point": "manager.py",
@@ -31,6 +31,12 @@
     ">=3.0.0"
   ],
   "versions": [
+    {
+      "version": "1.2.2",
+      "released": "2026-10-30",
+      "ledmatrix_min": "2.0.0",
+      "notes": "RGBIC support: effects now use a light's sections (a comet runs along it, fireworks pop on single sections, burst swaps alternating sections, glow fills up). Section counts are set in the Govee Lights portal. Home Assistant lights restore the scene they were playing."
+    },
     {
       "version": "1.2.1",
       "released": "2026-10-30",

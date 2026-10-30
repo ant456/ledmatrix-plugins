@@ -101,10 +101,11 @@ class Portal:
 
     # -- playing -----------------------------------------------------------
 
-    def _fx(self, devices: List[str], events: Dict[str, Any], colors: Dict[str, Any]) -> g.GoveeFX:
+    def _fx(self, devices: List[str], events: Dict[str, Any], colors: Dict[str, Any],
+            segments: Optional[Dict[str, int]] = None) -> g.GoveeFX:
         ha = self.ha()
         cfg = self.load()
-        return g.GoveeFX({"enabled": True, "devices": devices, "events": events, "colors": colors,
+        return g.GoveeFX({"enabled": True, "devices": devices, "events": events, "colors": colors, "segments": segments or {},
                           "ha_url": ha["url"], "ha_token": ha["token"], "cooldown_seconds": 0,
                           "stagger_seconds": cfg["stagger_seconds"], "restore_fallback": cfg["restore_fallback"]},
                          self.log, self.session, central=False)
@@ -116,6 +117,54 @@ class Portal:
             return {"ok": False, "error": "A test is already playing"}
         threading.Thread(target=self._play, args=([light], "identify", 3.0, {}, "Blinking %s" % light), daemon=True).start()
         return {"ok": True}
+
+    def sweep(self, light: str, count: Any = 16) -> Dict[str, Any]:
+        """Light each section of one light in turn, so you can count how many it has."""
+        if not g.valid_light_id(light):
+            return {"ok": False, "error": "Not a light address"}
+        if self._test["running"]:
+            return {"ok": False, "error": "A test is already playing"}
+        try:
+            asked = int(count)
+        except (TypeError, ValueError):
+            asked = g.MAX_SEGMENTS
+        if light.startswith("light.") and asked < 2:        # a Home Assistant light only has sections if it says so
+            return {"ok": False, "error": "Home Assistant shows no separate sections for this light"}
+        n = max(2, min(g.MAX_SEGMENTS, asked))
+        threading.Thread(target=self._sweep, args=(light, n), daemon=True).start()
+        return {"ok": True}
+
+    def _sweep(self, light: str, n: int) -> None:
+        self._test.update(running=True, ok=None, message="Getting ready…", started=time.time())
+        obj = None
+        snap = None
+        try:
+            ha = self.ha()
+            if light.startswith("light."):
+                if not ha["available"]:
+                    self._test.update(ok=False, message="Home Assistant is not configured")
+                    return
+                obj = g.HaLight(light, ha["url"], ha["token"], self.session, n)
+            else:
+                obj = g.LanLight(light, n)
+            snap = obj.snapshot()
+            obj.prepare()
+            for k in range(n):
+                cols = [g.BLACK] * n
+                cols[k] = g.WHITE
+                obj.show_segments(cols)
+                self._test["message"] = "Section %d of %d. Count how many sections light up; nothing lights past the last one." % (k + 1, n)
+                time.sleep(0.8)
+            self._test.update(ok=True, message="Done. Enter how many sections lit up, then Save. The light is back how it was.")
+        except Exception as exc:  # noqa: BLE001
+            self._test.update(ok=False, message="Section test failed: %s" % exc)
+        finally:
+            if obj is not None:
+                try:
+                    obj.restore(snap, self.load()["restore_fallback"])
+                except Exception:  # noqa: BLE001
+                    pass
+            self._test["running"] = False
 
     def test(self, req: Dict[str, Any]) -> Dict[str, Any]:
         """Play what the form currently says, whether or not it has been saved."""
@@ -133,14 +182,17 @@ class Portal:
             p, a = g.team_colors(team.get("primary", "013369"), team.get("accent", "ffb612"))
             colors = {"primary": "%02x%02x%02x" % p, "accent": "%02x%02x%02x" % a}
         label = "%s on %d light%s" % (spec["effect"], len(lights), "" if len(lights) == 1 else "s")
-        threading.Thread(target=self._play, args=(lights, spec["effect"], spec["seconds"], colors, label), daemon=True).start()
+        raw_segs = req.get("segments") if isinstance(req.get("segments"), dict) else {}
+        segs = {i: max(1, min(g.MAX_SEGMENTS, int(raw_segs.get(i, 1)))) for i in lights if str(raw_segs.get(i, 1)).isdigit()}
+        threading.Thread(target=self._play, args=(lights, spec["effect"], spec["seconds"], colors, label, segs), daemon=True).start()
         return {"ok": True, "message": "Playing " + label}
 
-    def _play(self, lights: List[str], effect: str, seconds: float, colors: Dict[str, Any], label: str) -> None:
+    def _play(self, lights: List[str], effect: str, seconds: float, colors: Dict[str, Any], label: str,
+              segments: Optional[Dict[str, int]] = None) -> None:
         self._test.update(running=True, ok=None, message="Playing: " + label, started=time.time())
         fx = None
         try:
-            fx = self._fx(lights, {"test": {"effect": effect, "seconds": seconds}}, {"test": colors} if colors else {})
+            fx = self._fx(lights, {"test": {"effect": effect, "seconds": seconds}}, {"test": colors} if colors else {}, segments)
             if not fx.lights:
                 self._test.update(ok=False, message="None of those lights could be set up (is Home Assistant configured?)")
                 return
@@ -179,8 +231,12 @@ class Portal:
         except Exception as exc:  # noqa: BLE001
             return {"teams": cached[1] if cached else [], "error": "Could not load teams (%s)" % type(exc).__name__}
 
-    def previews(self, primary: Any, accent: Any, custom: bool) -> Dict[str, Any]:
-        return {k: g.preview(k, primary, accent, 5.0, custom) for k in g.PICKABLE}
+    def previews(self, primary: Any, accent: Any, custom: bool, segments: Any = 1) -> Dict[str, Any]:
+        try:
+            n = max(1, min(g.MAX_SEGMENTS, int(segments)))
+        except (TypeError, ValueError):
+            n = 1
+        return {k: g.preview(k, primary, accent, 5.0, custom, n) for k in g.PICKABLE}
 
 
 def create_app(portal: Portal, static_dir: Path):
@@ -231,6 +287,12 @@ def create_app(portal: Portal, static_dir: Path):
         r = portal.identify(str(body().get("id", "")))
         return jsonify(r), (200 if r["ok"] else 409)
 
+    @app.post("/api/segments")
+    def segments():
+        b = body()
+        r = portal.sweep(str(b.get("id", "")), b.get("count", 16))
+        return jsonify(r), (200 if r["ok"] else 409)
+
     @app.post("/api/test")
     def test():
         r = portal.test(body())
@@ -247,6 +309,7 @@ def create_app(portal: Portal, static_dir: Path):
     @app.post("/api/previews")
     def previews():
         b = body()
-        return jsonify(portal.previews(b.get("primary", "013369"), b.get("accent", "ffb612"), bool(b.get("custom"))))
+        return jsonify(portal.previews(b.get("primary", "013369"), b.get("accent", "ffb612"), bool(b.get("custom")),
+                                       b.get("segments", 1)))
 
     return app

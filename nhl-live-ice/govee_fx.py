@@ -23,6 +23,7 @@ Command line, to try it without a game:
 
 from __future__ import annotations
 
+import base64
 import colorsys
 import json
 import logging
@@ -207,27 +208,156 @@ EVENT_NAMES = ("score", "big_score", "against")
 KNOWN_SPORTS = ("nfl", "nba", "nhl")
 
 
-def preview(effect: str, primary: Any, accent: Any, seconds: float, custom: bool = False) -> Dict[str, Any]:
-    """One light's colour over time, for the portal's animated swatch."""
+def preview(effect: str, primary: Any, accent: Any, seconds: float, custom: bool = False, segments: int = 1) -> Dict[str, Any]:
+    """One light's colours over time, for the portal's animated swatch. Each step is [time, [rgb per segment]]."""
     if custom:
         p, a = parse_color(primary), parse_color(accent)
     else:
         p, a = team_colors(primary, accent)
     secs = max(2.0, min(30.0, float(seconds)))
-    steps = EFFECTS.get(effect, fx_burst)(p, a, secs)
-    return {"seconds": secs, "steps": [[round(t, 3), list(c)] for t, c in steps], "primary": list(p), "accent": list(a)}
+    n = max(1, min(MAX_SEGMENTS, int(segments)))
+    fr = frames(effect, p, a, secs, n)
+    return {"seconds": secs, "segments": n, "steps": [[round(t, 3), [list(c) for c in cols]] for t, cols in fr],
+            "primary": list(p), "accent": list(a)}
 
 
-def timeline(effect: str, p: RGB, a: RGB, dur: float, lights: int, stagger: float) -> List[Tuple[float, int, RGB, bool]]:
+
+# ----------------------------------------------------------------------
+# segment-aware effects (RGBIC lights): each returns [(seconds, [rgb per segment])]
+# ----------------------------------------------------------------------
+
+SegFrames = List[Tuple[float, List[RGB]]]
+MAX_SEGMENTS = 16
+_LEVELS = (1.0, 0.55, 0.25, 0.08)
+
+
+def _seg_tail(frames: SegFrames, t: float, colours: List[RGB], dur: float) -> SegFrames:
+    fade = min(1.5, max(0.5, dur - t))
+    frames.append((t, colours))
+    n = max(1, int(round(fade * HZ)))
+    start = max(t, dur - fade)
+    for k in range(1, n + 1):
+        f = 1.0 - 0.88 * k / n
+        frames.append((start + (dur - start) * k / n, [scale(c, f) for c in colours]))
+    return frames
+
+
+def seg_burst(p: RGB, a: RGB, dur: float, n: int) -> SegFrames:
+    fr: SegFrames = [(0.0, [WHITE] * n), (0.15, [p] * n)]
+    t = 0.35
+    for k in range(5):
+        fr.append((t, [a if (i + k) % 2 == 0 else p for i in range(n)]))     # the two colours trade places
+        t += 0.32 if k < 3 else 0.5
+    return _seg_tail(fr, t, [p] * n, dur)
+
+
+def seg_chase(p: RGB, a: RGB, dur: float, n: int) -> SegFrames:
+    """A comet runs along the light, alternating colour on each pass."""
+    fr: SegFrames = []
+    speed = max(6.0, n / 1.1)                      # segments per second
+    base_of = lambda c: scale(c, 0.18)
+    t, tail = 0.0, 2
+    while t < dur - 1.4:
+        pas = int(t * speed // (n + tail))
+        comet = p if pas % 2 == 0 else a
+        head = (t * speed) % (n + tail)
+        cols = []
+        for i in range(n):
+            d = head - i
+            if 0 <= d < 1:
+                cols.append(comet)
+            elif 1 <= d < 1 + tail:
+                cols.append(mix(base_of(comet), comet, 0.5 if d < 2 else 0.22))
+            else:
+                cols.append(base_of(p if pas % 2 == 0 else a))
+        fr.append((t, cols))
+        t += 1.0 / HZ
+    return _seg_tail(fr, t, [p] * n, dur)
+
+
+def seg_fireworks(p: RGB, a: RGB, dur: float, n: int) -> SegFrames:
+    rng = random.Random(7)
+    level = [0] * n                                # 0 = off, else index into _LEVELS + 1
+    colour = [p] * n
+    fr: SegFrames = []
+    t = 0.0
+    while t < dur - 1.6:
+        if rng.random() < 0.55:
+            for _ in range(rng.choice((1, 1, 2, 3))):
+                i = rng.randrange(n)
+                level[i], colour[i] = 1, rng.choice([p, a, WHITE, p])
+        fr.append((t, [scale(colour[i], _LEVELS[level[i] - 1]) if level[i] else BLACK for i in range(n)]))
+        level = [(l + 1 if 0 < l < len(_LEVELS) else 0) for l in level]
+        t += 1.0 / HZ
+    return _seg_tail(fr, t, [p] * n, dur)
+
+
+def seg_pulse(p: RGB, a: RGB, dur: float, n: int) -> SegFrames:
+    """Breathing, with the breath rippling along the light."""
+    fr: SegFrames = []
+    for k in range(int(dur * HZ) + 1):
+        t = k / HZ
+        cols = []
+        for i in range(n):
+            f = 0.15 + 0.85 * (0.5 - 0.5 * math.cos(2 * math.pi * t / 1.5 - i * 0.55))
+            f = round(f * 5) / 5.0                 # few distinct levels means few packets
+            cols.append(mix(scale(p, f), scale(a, f), 0.25 * f))
+        fr.append((t, cols))
+    return fr
+
+
+def seg_flash(p: RGB, a: RGB, dur: float, n: int) -> SegFrames:
+    return [(t, [c] * n) for t, c in fx_flash(p, a, dur)]
+
+
+def seg_strobe(p: RGB, a: RGB, dur: float, n: int) -> SegFrames:
+    fr: SegFrames = []
+    t, k = 0.0, 0
+    while t < min(2.0, dur - 1.0):
+        fr.append((t, [p if (i + k) % 2 == 0 else BLACK for i in range(n)]))   # alternate segments, swapping fast
+        t += 0.09
+        k += 1
+    return _seg_tail(fr, t, [p] * n, dur)
+
+
+def seg_glow(p: RGB, a: RGB, dur: float, n: int) -> SegFrames:
+    """Fills up segment by segment like a meter, then holds."""
+    fr: SegFrames = []
+    steps = max(n, int(1.2 * HZ))
+    for k in range(steps + 1):
+        t = 1.2 * k / steps
+        reach = (k / steps) * (n + 1.5)
+        fr.append((t, [mix(BLACK, p, max(0.0, min(1.0, reach - i))) for i in range(n)]))
+    return _seg_tail(fr, 1.2, [p] * n, dur)
+
+
+SEG_EFFECTS: Dict[str, Callable[[RGB, RGB, float, int], SegFrames]] = {
+    "burst": seg_burst, "chase": seg_chase, "fireworks": seg_fireworks, "pulse": seg_pulse,
+    "flash": seg_flash, "strobe": seg_strobe, "glow": seg_glow,
+}
+
+
+def frames(effect: str, p: RGB, a: RGB, dur: float, n: int = 1) -> SegFrames:
+    """One light's frames: a colour per segment. A one-segment light plays the plain effect."""
+    dur = max(2.0, float(dur))
+    n = max(1, min(MAX_SEGMENTS, int(n)))
+    if n == 1 or effect not in SEG_EFFECTS:
+        return [(t, [c] * n) for t, c in EFFECTS.get(effect, fx_burst)(p, a, dur)]
+    return SEG_EFFECTS[effect](p, a, dur, n)
+
+
+def timeline(effect: str, p: RGB, a: RGB, dur: float, lights: int, stagger: float,
+             segments: Optional[List[int]] = None) -> List[Tuple[float, int, Any, bool]]:
     """(time, light index, colour, is_last_for_that_light), in time order. Several lights run the same
-    effect a little apart, so a colour appears to travel along them."""
-    fn = EFFECTS.get(effect, fx_burst)
-    base = fn(p, a, max(2.0, float(dur)))
+    effect a little apart, so a colour appears to travel along them. A light with segments gets a list
+    of colours (one per segment) instead of a single colour."""
+    segs = list(segments or []) + [1] * max(0, lights - len(segments or []))
     out = []
     for i in range(lights):
         off = i * stagger
-        for k, (t, c) in enumerate(base):
-            out.append((t + off, i, c, k == len(base) - 1))
+        fr = frames(effect, p, a, dur, segs[i])
+        for k, (t, cols) in enumerate(fr):
+            out.append((t + off, i, cols[0] if segs[i] == 1 else cols, k == len(fr) - 1))
     out.sort(key=lambda x: x[0])
     return out
 
@@ -322,13 +452,40 @@ class LanTransport:
 # lights
 # ----------------------------------------------------------------------
 
+def segment_packet(rgb: RGB, mask: int) -> str:
+    """Govee's 20-byte "segment colour" packet (0x33 0x05 0x15 0x01 R G B ... segment bitmask ... xor), base64."""
+    data = [0x33, 0x05, 0x15, 0x01, rgb[0], rgb[1], rgb[2], 0, 0, 0, 0, 0, mask & 0xFF, (mask >> 8) & 0xFF]
+    data += [0] * (19 - len(data))
+    chk = 0
+    for b in data:
+        chk ^= b
+    data.append(chk)
+    return base64.b64encode(bytes(data)).decode()
+
+
+def group_segments(colours: List[RGB]) -> Dict[RGB, int]:
+    """{colour: bitmask of the segments that show it}, so one packet can colour many segments."""
+    groups: Dict[RGB, int] = {}
+    for i, c in enumerate(colours):
+        groups[tuple(c)] = groups.get(tuple(c), 0) | (1 << i)      # type: ignore[index]
+    return groups
+
+
 class LanLight:
     kind = "lan"
 
-    def __init__(self, address: str) -> None:
+    def __init__(self, address: str, segments: int = 1) -> None:
         host, _, port = address.partition(":")
         self.name, self.ip, self.port = address, host, int(port) if port else CONTROL_PORT
+        self.segments = max(1, min(MAX_SEGMENTS, int(segments)))
         self.net = LanTransport.get()
+
+    def show_segments(self, colours: List[RGB]) -> None:
+        groups = group_segments(colours)
+        if len(groups) == 1:                                       # one colour everywhere: the plain, dependable command
+            self.show(next(iter(groups)))
+            return
+        self.net.send(self.ip, "ptReal", {"command": [segment_packet(c, m) for c, m in groups.items()]}, self.port)
 
     def snapshot(self) -> Optional[Dict[str, Any]]:
         return self.net.query(self.ip, self.port)
@@ -366,12 +523,22 @@ class LanLight:
 class HaLight:
     kind = "ha"
 
-    def __init__(self, entity: str, url: str, token: str, session: Any = None) -> None:
+    def __init__(self, entity: str, url: str, token: str, session: Any = None, segments: int = 1) -> None:
         self.name, self.url, self.token = entity, url.rstrip("/"), token
         if session is None:
             import requests
             session = requests.Session()
         self.session = session
+        self.segments = max(1, min(MAX_SEGMENTS, int(segments)))
+        # Home Assistant's Govee integration names a light's sections <light>_segment_1 ... _segment_N
+        self.parts = [HaLight("%s_segment_%d" % (entity, i + 1), url, token, session) for i in range(self.segments)] \
+            if self.segments > 1 else []
+
+    def show_segments(self, colours: List[RGB]) -> None:
+        for colour, mask in group_segments(colours).items():
+            ids = [self.parts[i].name for i in range(len(self.parts)) if mask >> i & 1]
+            self.session.post("%s/api/services/light/turn_on" % self.url, headers=self._headers(), timeout=5,
+                              json={"entity_id": ids, "rgb_color": list(colour), "brightness": 255})
 
     def _headers(self) -> Dict[str, str]:
         return {"Authorization": "Bearer " + self.token, "Content-Type": "application/json"}
@@ -381,6 +548,8 @@ class HaLight:
         self.session.post("%s/api/services/light/%s" % (self.url, service), headers=self._headers(), json=data, timeout=5)
 
     def snapshot(self) -> Optional[Dict[str, Any]]:
+        if self.parts:
+            return {"parts": [p.snapshot() for p in self.parts]}
         r = self.session.get("%s/api/states/%s" % (self.url, self.name), headers=self._headers(), timeout=5)
         if getattr(r, "status_code", 200) != 200:
             return None
@@ -391,9 +560,16 @@ class HaLight:
         pass
 
     def show(self, rgb: RGB) -> None:
+        if self.parts:                                  # touch only the sections, never the parent light
+            self.show_segments([rgb] * len(self.parts))
+            return
         self._call("turn_on", {"rgb_color": list(rgb), "brightness": 255})
 
     def restore(self, snap: Optional[Dict[str, Any]], fallback: str) -> None:
+        if self.parts:
+            for part, ps in zip(self.parts, (snap or {}).get("parts") or [None] * len(self.parts)):
+                part.restore(ps, fallback)
+            return
         if snap is None or snap.get("state") in (None, "unavailable", "unknown"):
             if fallback == "off":
                 self._call("turn_off", {})
@@ -409,6 +585,8 @@ class HaLight:
             data["color_temp_kelvin"] = at["color_temp_kelvin"]
         elif at.get("rgb_color"):
             data["rgb_color"] = list(at["rgb_color"])
+        if at.get("effect") not in (None, "", "None", "none"):         # a scene the light was playing
+            data["effect"] = at["effect"]
         self._call("turn_on", data)
 
 
@@ -475,8 +653,12 @@ def clean_config(raw: Any) -> Dict[str, Any]:
         if not isinstance(l, dict) or not valid_light_id(l.get("id")) or l["id"] in seen:
             continue
         seen.add(l["id"])
+        try:
+            nseg = max(1, min(MAX_SEGMENTS, int(l.get("segments", 1))))
+        except (TypeError, ValueError):
+            nseg = 1
         lights.append({"id": l["id"], "label": str(l.get("label") or "")[:40], "enabled": bool(l.get("enabled", True)),
-                       "model": str(l.get("model") or "")[:20]})
+                       "model": str(l.get("model") or "")[:20], "segments": nseg})
         if len(lights) >= 40:
             break
     sports = {k: True for k in KNOWN_SPORTS}
@@ -534,6 +716,7 @@ def central_to_cfg(raw: Any, sport: Optional[str], lm_config: Optional[Path] = N
     url, token = ha_credentials(lm_config, c["ha_source"])
     return {"enabled": c["enabled"] and (sport is None or c["sports"].get(sport, True)),
             "devices": [l["id"] for l in c["lights"] if l["enabled"]], "events": events, "colors": colors,
+            "segments": {l["id"]: l["segments"] for l in c["lights"]},
             "ha_url": url, "ha_token": token, "cooldown_seconds": c["cooldown_seconds"],
             "stagger_seconds": c["stagger_seconds"], "restore_fallback": c["restore_fallback"]}
 
@@ -582,14 +765,21 @@ def list_ha_lights(url: str, token: str, govee_only: bool = True, session: Any =
         except (OSError, ValueError, requests.RequestException):
             keep = None
     r = s.get(base + "/api/states", headers=hd, timeout=15)
+    states = r.json()
+    counts: Dict[str, int] = {}
+    for st in states:                                       # <light>_segment_N entities say how many sections it has
+        m = re.match(r"^(light\..+?)_segment_(\d+)$", st.get("entity_id", ""))
+        if m:
+            counts[m.group(1)] = max(counts.get(m.group(1), 0), int(m.group(2)))
     out = []
-    for st in r.json():
+    for st in states:
         eid = st.get("entity_id", "")
         if not eid.startswith("light.") or _SEGMENT_RE.search(eid):
             continue
         if keep is not None and eid not in keep:
             continue
-        out.append({"id": eid, "name": (st.get("attributes") or {}).get("friendly_name") or eid, "state": st.get("state", "")})
+        out.append({"id": eid, "name": (st.get("attributes") or {}).get("friendly_name") or eid, "state": st.get("state", ""),
+                    "segments": min(MAX_SEGMENTS, counts.get(eid, 1))})
     return sorted(out, key=lambda x: x["name"].lower())
 
 
@@ -704,16 +894,21 @@ class GoveeFX:
         self.lights = []
         if not self.enabled:
             return
+        seg_map = cfg.get("segments") if isinstance(cfg.get("segments"), dict) else {}
         for entry in cfg.get("devices") or []:
             entry = str(entry).strip()
+            try:
+                nseg = max(1, min(MAX_SEGMENTS, int(seg_map.get(entry, 1))))
+            except (TypeError, ValueError):
+                nseg = 1
             try:
                 if entry.startswith("light."):
                     if not (cfg.get("ha_url") and cfg.get("ha_token")):
                         self.log.warning("govee: %s needs ha_url and ha_token", entry)
                         continue
-                    self.lights.append(HaLight(entry, cfg["ha_url"], cfg["ha_token"], self._session))
+                    self.lights.append(HaLight(entry, cfg["ha_url"], cfg["ha_token"], self._session, nseg))
                 elif entry:
-                    self.lights.append(LanLight(entry))
+                    self.lights.append(LanLight(entry, nseg))
             except Exception as exc:  # noqa: BLE001 - a bad entry must not stop the plugin
                 self.log.warning("govee: could not set up %s: %s", entry, exc)
         if self.lights and self._thread is None:
@@ -798,14 +993,14 @@ class GoveeFX:
             self._snaps = [self._safe(l.snapshot) for l in lights]
         for l in lights:
             self._safe(l.prepare)
-        steps = timeline(effect, p, a, dur, len(lights), self.stagger)
+        steps = timeline(effect, p, a, dur, len(lights), self.stagger, [getattr(l, "segments", 1) for l in lights])
         start = time.monotonic()
         for t, i, rgb, last in steps:
             if not self._sleep_until(start + t / self.time_scale, gen):
                 return                      # a newer effect (or close) took over; it will restore
             if not last and time.monotonic() - (start + t / self.time_scale) > 0.5:
                 continue                    # running behind (slow Home Assistant): skip, catch up
-            self._safe(lights[i].show, rgb)
+            self._safe(lights[i].show_segments if isinstance(rgb, list) else lights[i].show, rgb)
         if self._gen != gen:
             return
         time.sleep(0.25 / self.time_scale)

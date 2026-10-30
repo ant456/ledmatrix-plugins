@@ -72,7 +72,10 @@ input[type=range] { accent-color: var(--coin); flex: 1; min-width: 120px; }
 .fx { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 6px; }
 .fx:hover { border-color: var(--dim); }
 .fx.on { border-color: var(--coin); box-shadow: 0 0 0 1px var(--coin); }
-.fx .sw { height: 34px; border-radius: 6px; background: #000; transition: none; }
+.fx .sw { height: 34px; display: flex; gap: 2px; }
+.fx .sw i { flex: 1; border-radius: 5px; background: #000; min-width: 0; }
+.segctl { display: inline-flex; align-items: center; gap: 6px; }
+.segctl input { width: 56px; padding: 4px 6px; background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 6px; font: inherit; }
 .fx b { font-size: 13px; text-transform: capitalize; }
 .fx small { color: var(--dim); font-size: 11px; line-height: 1.3; }
 .opts { display: flex; gap: 14px 22px; flex-wrap: wrap; align-items: center; }
@@ -202,8 +205,9 @@ function renderLights() {
     return `<div class="light ${l.enabled ? "" : "off"}">
       <label class="switch" title="React to games"><input type="checkbox" data-i="${i}" data-a="en" ${l.enabled ? "checked" : ""} aria-label="Use ${esc(lightName(l))}"><span></span></label>
       <div><input type="text" class="name" data-i="${i}" data-a="label" value="${esc(l.label)}" placeholder="${esc(lightName(l))}" maxlength="40" aria-label="Name">
-        <div class="meta"><span class="dot ${cls}" title="${!st ? "not checked" : st.ok ? "answering" : "not answering"}"></span>${kind}<span>${esc(l.id)}${now}</span></div></div>
-      <div class="acts"><button class="btn" data-i="${i}" data-a="blink" title="Blink this light white three times">Blink</button><button class="btn x" data-i="${i}" data-a="del" aria-label="Remove">✕</button></div></div>`;
+        <div class="meta"><span class="dot ${cls}" title="${!st ? "not checked" : st.ok ? "answering" : "not answering"}"></span>${kind}<span>${esc(l.id)}${now}</span>
+          <label class="segctl" title="RGBIC lights have sections that can each show their own color. 1 means the whole light acts as one.">Sections <input type="number" min="1" max="16" value="${l.segments || 1}" data-i="${i}" data-a="segs" aria-label="Number of sections"></label></div></div>
+      <div class="acts"><button class="btn" data-i="${i}" data-a="blink" title="Blink this light white three times">Blink</button><button class="btn" data-i="${i}" data-a="sweep" title="Light each section in turn so you can count them">Show sections</button><button class="btn x" data-i="${i}" data-a="del" aria-label="Remove">✕</button></div></div>`;
   }).join("");
   renderTestLights();
 }
@@ -211,7 +215,9 @@ $("#lights").addEventListener("input", e => {
   const el = e.target; if (el.dataset.a === "label") { cfg.lights[+el.dataset.i].label = el.value; touch(); renderTestLights(); }
 });
 $("#lights").addEventListener("change", e => {
-  const el = e.target; if (el.dataset.a === "en") { cfg.lights[+el.dataset.i].enabled = el.checked; touch(); renderLights(); }
+  const el = e.target;
+  if (el.dataset.a === "en") { cfg.lights[+el.dataset.i].enabled = el.checked; touch(); renderLights(); renderEvents(); }
+  if (el.dataset.a === "segs") { cfg.lights[+el.dataset.i].segments = Math.max(1, Math.min(16, parseInt(el.value) || 1)); touch(); renderLights(); renderEvents(); }
 });
 $("#lights").addEventListener("click", async e => {
   const b = e.target.closest("button"); if (!b) return; const i = +b.dataset.i, l = cfg.lights[i];
@@ -219,10 +225,21 @@ $("#lights").addEventListener("click", async e => {
   if (b.dataset.a === "blink") {
     try { await api("/api/identify", { id: l.id }); toast("Blinking " + lightName(l) + "…"); } catch (err) { toast(err.message, true); }
   }
+  if (b.dataset.a === "sweep") {
+    const msg = $("#scanmsg");
+    try {
+      await api("/api/segments", { id: l.id, count: l.id.startsWith("light.") ? (l.segments || 1) : 16 });
+      for (let n = 0; n < 60; n++) {
+        await new Promise(r => setTimeout(r, 600));
+        const t = await api("/api/test"); msg.textContent = lightName(l) + ": " + t.message;
+        if (!t.running) break;
+      }
+    } catch (err) { msg.textContent = err.message; }
+  }
 });
-function addLight(id, model, label) {
+function addLight(id, model, label, segments) {
   if (cfg.lights.some(l => l.id === id)) return false;
-  cfg.lights.push({ id, label: label || "", enabled: true, model: model || "" }); touch(); renderLights(); return true;
+  cfg.lights.push({ id, label: label || "", enabled: true, model: model || "", segments: segments || 1 }); touch(); renderLights(); renderEvents(); return true;
 }
 async function checkLights() {
   if (!cfg.lights.length) return;
@@ -273,11 +290,11 @@ async function showHa() {
     const q = $("#hasearch").value.toLowerCase();
     $("#halist").innerHTML = d.lights.filter(l => (l.name + l.id).toLowerCase().includes(q)).map(l => {
       const have = cfg.lights.some(x => x.id === l.id);
-      return `<div class="pick"><div>${esc(l.name)}<div class="dim small">${esc(l.id)} · ${esc(l.state)}</div></div><button class="btn" data-id="${esc(l.id)}" data-n="${esc(l.name)}" ${have ? "disabled" : ""}>${have ? "Added" : "Add"}</button></div>`;
+      return `<div class="pick"><div>${esc(l.name)}<div class="dim small">${esc(l.id)} · ${esc(l.state)}${l.segments > 1 ? " · " + l.segments + " sections" : ""}</div></div><button class="btn" data-id="${esc(l.id)}" data-n="${esc(l.name)}" data-s="${l.segments || 1}" ${have ? "disabled" : ""}>${have ? "Added" : "Add"}</button></div>`;
     }).join("") || '<p class="dim">No matches</p>';
   };
   $("#hasearch").oninput = draw; draw();
-  $("#halist").onclick = e => { const b = e.target.closest("button"); if (b && !b.disabled) { addLight(b.dataset.id, "", b.dataset.n); draw(); } };
+  $("#halist").onclick = e => { const b = e.target.closest("button"); if (b && !b.disabled) { addLight(b.dataset.id, "", b.dataset.n, +b.dataset.s); draw(); } };
 }
 $("#addha").onclick = showHa;
 
@@ -295,12 +312,13 @@ $("#scope").addEventListener("click", e => {
 });
 
 /* ---------- effects ---------- */
-function pvKey(sp) { return sp.colors === "team" ? `team|${team.primary}|${team.accent}` : `c|${sp.colors.primary}|${sp.colors.accent}`; }
+function previewSegs() { const n = cfg ? cfg.lights.filter(l => l.enabled).map(l => l.segments || 1) : []; return Math.min(12, Math.max(1, ...n)); }
+function pvKey(sp) { const n = previewSegs(); return sp.colors === "team" ? `team|${team.primary}|${team.accent}|${n}` : `c|${sp.colors.primary}|${sp.colors.accent}|${n}`; }
 async function loadPreviews(keys) {
   for (const k of keys) {
     if (previews[k]) continue;
-    const [kind, p, a] = k.split("|");
-    previews[k] = await api("/api/previews", { primary: p, accent: a, custom: kind === "c" }).catch(() => null);
+    const [kind, p, a, n] = k.split("|");
+    previews[k] = await api("/api/previews", { primary: p, accent: a, custom: kind === "c", segments: +n }).catch(() => null);
   }
 }
 function renderEvents() {
@@ -311,14 +329,14 @@ function renderEvents() {
       <div class="evhead"><label class="switch"><input type="checkbox" data-k="enabled" ${sp.enabled ? "checked" : ""} aria-label="${esc(ev.label)}"><span></span></label>
         <div style="flex:1"><b>${esc(ev.label)}</b> ${scope !== "all" ? (ov ? '<span class="tag">custom for ' + scope.toUpperCase() + "</span>" : '<span class="dim small">same as all sports</span>') : ""}<div class="dim small">${esc(ev.help)}</div></div>
         ${ov ? '<button class="btn small" data-k="reset">Use all-sports</button>' : ""}</div>
-      <div class="fxgrid" role="radiogroup" aria-label="Effect">${S.effects.map(f => `<button class="fx ${sp.effect === f.key ? "on" : ""}" role="radio" aria-checked="${sp.effect === f.key}" data-k="effect" data-v="${f.key}"><div class="sw" data-fx="${f.key}" data-pv="${esc(pvKey(sp))}"></div><b>${f.key}</b><small>${esc(f.info)}</small></button>`).join("")}</div>
+      <div class="fxgrid" role="radiogroup" aria-label="Effect">${S.effects.map(f => `<button class="fx ${sp.effect === f.key ? "on" : ""}" role="radio" aria-checked="${sp.effect === f.key}" data-k="effect" data-v="${f.key}"><div class="sw" data-fx="${f.key}" data-pv="${esc(pvKey(sp))}">${"<i></i>".repeat(previewSegs())}</div><b>${f.key}</b><small>${esc(f.info)}</small></button>`).join("")}</div>
       <div class="opts">
         <div class="row"><label class="k" for="sec-${ev.key}">Length</label><input type="range" id="sec-${ev.key}" min="2" max="30" step="1" value="${sp.seconds}" data-k="seconds"><b data-out="${ev.key}">${sp.seconds}s</b></div>
         <div class="row"><span class="k dim small">Colors</span><div class="seg"><button data-k="colors" data-v="team" class="${custom ? "" : "on"}">Team colors</button><button data-k="colors" data-v="custom" class="${custom ? "on" : ""}">Custom</button></div>
           ${custom ? `<input type="color" data-k="cp" value="${hex2(cp.primary)}" aria-label="Main color"><input type="color" data-k="ca" value="${hex2(cp.accent)}" aria-label="Second color">` : ""}</div>
       </div></div>`;
   }).join("");
-  loadPreviews(new Set(S.events.map(e => pvKey(spec(scope, e.key))))).then(() => { });
+  loadPreviews(new Set(S.events.map(e => pvKey(spec(scope, e.key)))));
   renderSummary();
 }
 $("#events").addEventListener("click", e => {
@@ -344,16 +362,19 @@ $("#events").addEventListener("input", e => {
 });
 
 /* animated swatches: one loop drives every preview tile */
-function colorAt(steps, t) {
-  let c = [0, 0, 0];
+function colorAt(steps, t) {                          // a list of colors, one per section
+  let c = [[0, 0, 0]];
   for (const [ts, col] of steps) { if (ts <= t) c = col; else break; }
   return c;
 }
 function tick(now) {
   document.querySelectorAll(".sw").forEach(el => {
     const pv = previews[el.dataset.pv]; if (!pv) return; const p = pv[el.dataset.fx]; if (!p) return;
-    const t = (now / 1000) % (p.seconds + 1), c = colorAt(p.steps, t), css = `rgb(${c[0]},${c[1]},${c[2]})`;
-    el.style.background = css; el.style.boxShadow = `0 0 14px ${css}`;
+    const t = (now / 1000) % (p.seconds + 1), cols = colorAt(p.steps, t);
+    for (let i = 0; i < el.children.length; i++) {
+      const c = cols[Math.min(i, cols.length - 1)], css = `rgb(${c[0]},${c[1]},${c[2]})`, cell = el.children[i];
+      cell.style.background = css; cell.style.boxShadow = `0 0 10px ${css}`;
+    }
   });
   requestAnimationFrame(tick);
 }
@@ -379,7 +400,7 @@ async function loadTeams() {
   const d = await api("/api/teams?sport=" + tsel.sport).catch(() => ({ teams: [] }));
   teams = d.teams;
   if (teams.length && !teams.some(t => t.abbr === team.abbr)) team = teams[0];
-  renderTeams(); await loadPreviews([pvKey({ colors: "team" })]); renderEvents();
+  renderTeams(); renderEvents();
 }
 $("#tsport").onchange = e => { tsel.sport = e.target.value; loadTeams(); renderSummary(); };
 $("#tteam").onchange = e => { team = teams.find(t => t.abbr === e.target.value) || team; renderEvents(); };
@@ -395,7 +416,8 @@ $("#test").onclick = async () => {
   const sp = spec(tsel.sport, tsel.event), st = $("#teststatus");
   testing = true; $("#test").disabled = true; st.className = ""; st.textContent = "Starting…";
   try {
-    await api("/api/test", { spec: sp, team, lights: [...tsel.lights] });
+    const segs = {}; cfg.lights.forEach(l => { if (tsel.lights.has(l.id)) segs[l.id] = l.segments || 1; });
+    await api("/api/test", { spec: sp, team, lights: [...tsel.lights], segments: segs });
     for (let n = 0; n < 120; n++) {
       await new Promise(r => setTimeout(r, 700));
       const t = await api("/api/test");

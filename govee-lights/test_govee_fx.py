@@ -410,7 +410,7 @@ class CentralConfig(unittest.TestCase):
         pv = g.preview("burst", "013369", "ffb612", 6)
         self.assertEqual(pv["seconds"], 6.0)
         self.assertGreater(len(pv["steps"]), 5)
-        self.assertEqual(pv["steps"][0][1], [255, 255, 255])
+        self.assertEqual(pv["steps"][0][1], [[255, 255, 255]])
         self.assertEqual(g.preview("nope", "013369", "ffb612", 99)["seconds"], 30.0)
 
     def test_every_picker_effect_has_a_description(self):
@@ -444,6 +444,184 @@ class CentralConfig(unittest.TestCase):
         got = g.list_ha_lights("http://ha", "T", True, S())
         self.assertEqual([x["id"] for x in got], ["light.bed", "light.tv"])
         self.assertEqual([x["id"] for x in g.list_ha_lights("http://ha", "T", False, S())], ["light.bed", "light.hue", "light.tv"])
+
+
+class Segments(unittest.TestCase):
+    def test_segment_packet_layout_and_checksum(self):
+        import base64
+        raw = base64.b64decode(g.segment_packet((10, 20, 30), 0b101))
+        self.assertEqual(len(raw), 20)
+        self.assertEqual(list(raw[:7]), [0x33, 0x05, 0x15, 0x01, 10, 20, 30])
+        self.assertEqual((raw[12], raw[13]), (0b101, 0))
+        chk = 0
+        for b in raw[:19]:
+            chk ^= b
+        self.assertEqual(raw[19], chk)
+        hi = base64.b64decode(g.segment_packet((1, 2, 3), 1 << 12))     # segment 13 lives in the second mask byte
+        self.assertEqual((hi[12], hi[13]), (0, 0x10))
+
+    def test_group_segments_merges_same_colours(self):
+        grp = g.group_segments([(1, 1, 1), (2, 2, 2), (1, 1, 1), (0, 0, 0)])
+        self.assertEqual(grp, {(1, 1, 1): 0b0101, (2, 2, 2): 0b0010, (0, 0, 0): 0b1000})
+
+    def test_one_segment_plays_the_plain_effect(self):
+        p, a = g.team_colors("013369", "ffb612")
+        for name in g.PICKABLE:
+            plain = g.EFFECTS[name](p, a, 6.0)
+            fr = g.frames(name, p, a, 6.0, 1)
+            self.assertEqual([(t, c[0]) for t, c in fr], plain, name)
+
+    def test_every_segment_effect_is_ordered_in_range_and_the_right_width(self):
+        p, a = g.team_colors("013369", "ffb612")
+        for n in (2, 5, 8, 13, 16):
+            for name in g.PICKABLE:
+                fr = g.frames(name, p, a, 8.0, n)
+                ts = [t for t, _ in fr]
+                self.assertEqual(ts, sorted(ts), (name, n))
+                self.assertLessEqual(ts[-1], 8.0 + 1e-6, (name, n))
+                for _, cols in fr:
+                    self.assertEqual(len(cols), n, (name, n))
+                    for c in cols:
+                        self.assertTrue(all(0 <= x <= 255 for x in c), (name, n, c))
+
+    def test_effects_really_use_the_segments(self):
+        p, a = g.team_colors("013369", "ffb612")
+        for name in ("burst", "chase", "fireworks", "pulse", "strobe", "glow"):
+            fr = g.frames(name, p, a, 8.0, 8)
+            self.assertTrue(any(len(set(cols)) > 1 for _, cols in fr), name + " never varies along the light")
+
+    def test_chase_comet_travels_along_the_light(self):
+        p, a = (255, 0, 0), (0, 0, 255)
+        fr = g.frames("chase", p, a, 8.0, 10)
+        heads = []
+        for _, cols in fr[:8]:
+            lum = [sum(c) for c in cols]
+            heads.append(lum.index(max(lum)))
+        self.assertEqual(heads, sorted(heads))                 # moving one way
+        self.assertGreater(heads[-1], heads[0])
+
+    def test_glow_fills_from_one_end_and_ends_full(self):
+        p = (255, 0, 0)
+        fr = g.frames("glow", p, g.WHITE, 6.0, 6)
+        early = fr[len(fr) // 12][1]
+        self.assertGreater(sum(early[0]), sum(early[-1]))
+        full = [cols for t, cols in fr if abs(t - 1.2) < 1e-6][-1]
+        self.assertTrue(all(c == p for c in full))
+
+    def test_timeline_gives_lists_only_to_segmented_lights(self):
+        tl = g.timeline("burst", (255, 0, 0), g.WHITE, 4.0, 2, 0.1, [1, 6])
+        self.assertTrue(all(isinstance(c, tuple) for t, i, c, last in tl if i == 0))
+        self.assertTrue(all(isinstance(c, list) and len(c) == 6 for t, i, c, last in tl if i == 1))
+        self.assertEqual(sum(1 for *_, last in tl if last), 2)
+
+    def test_clean_config_keeps_and_clamps_segments(self):
+        c = g.clean_config({"lights": [{"id": "192.168.0.9", "segments": 99}, {"id": "192.168.0.10", "segments": "x"},
+                                      {"id": "192.168.0.11", "segments": 7}, {"id": "192.168.0.12"}]})
+        self.assertEqual([l["segments"] for l in c["lights"]], [16, 1, 7, 1])
+        cfg = g.central_to_cfg({"enabled": True, "lights": [{"id": "192.168.0.11", "segments": 7}]}, "nfl")
+        self.assertEqual(cfg["segments"], {"192.168.0.11": 7})
+
+    def test_preview_carries_every_segment(self):
+        pv = g.preview("chase", "013369", "ffb612", 5, False, 6)
+        self.assertEqual(pv["segments"], 6)
+        self.assertTrue(all(len(cols) == 6 for _, cols in pv["steps"]))
+        self.assertEqual(g.preview("burst", "013369", "ffb612", 5)["segments"], 1)
+
+
+class SegmentsOnLan(unittest.TestCase):
+    def setUp(self):
+        self.dev = FakeLight(14003)
+
+    def tearDown(self):
+        self.dev.stop()
+
+    def test_segmented_light_gets_ptreal_packets_then_is_restored(self):
+        import base64
+        fx = g.GoveeFX({"enabled": True, "devices": ["127.0.0.1:14003"], "segments": {"127.0.0.1:14003": 8},
+                        "events": {"score": {"effect": "chase", "seconds": 4}}, "cooldown_seconds": 0}, central=False)
+        self.assertEqual(fx.lights[0].segments, 8)
+        fx.trigger("score", "013369", "ffb612")
+        self.assertTrue(wait_done(fx))
+        fx.close()
+        pt = [c for c in self.dev.cmds if c[0] == "ptReal"]
+        self.assertGreater(len(pt), 6)
+        for _, data in pt:
+            for pkt in data["command"]:
+                raw = base64.b64decode(pkt)
+                self.assertEqual((len(raw), raw[0], raw[2]), (20, 0x33, 0x15))
+        self.assertEqual(self.dev.cmds[-3], ("colorwc", {"color": {"r": 10, "g": 20, "b": 30}, "colorTemInKelvin": 0}))
+        self.assertEqual(self.dev.cmds[-2], ("brightness", {"value": 42}))
+        self.assertEqual(self.dev.state["onOff"], 1)
+
+    def test_a_frame_with_one_colour_uses_the_plain_command(self):
+        light = g.LanLight("127.0.0.1:14003", 6)
+        light.show_segments([(5, 6, 7)] * 6)
+        time.sleep(0.3)
+        self.assertEqual(self.dev.cmds[-1], ("colorwc", {"color": {"r": 5, "g": 6, "b": 7}, "colorTemInKelvin": 0}))
+
+    def test_a_single_datagram_carries_every_colour_group(self):
+        light = g.LanLight("127.0.0.1:14003", 6)
+        light.show_segments([(255, 0, 0), (0, 0, 255), (255, 0, 0), (0, 0, 0), (0, 0, 255), (255, 0, 0)])
+        time.sleep(0.3)
+        cmd, data = self.dev.cmds[-1]
+        self.assertEqual(cmd, "ptReal")
+        self.assertEqual(len(data["command"]), 3)
+
+
+class SegmentsOnHomeAssistant(unittest.TestCase):
+    def make(self, states):
+        sess = FakeSession(states)
+        light = g.HaLight("light.dj", "http://ha", "T", sess, 3)
+        return light, sess
+
+    def test_segmented_ha_light_drives_its_numbered_entities(self):
+        light, sess = self.make({})
+        light.show_segments([(1, 1, 1), (2, 2, 2), (1, 1, 1)])
+        got = {tuple(d["rgb_color"]): d["entity_id"] for _, d in sess.calls}
+        self.assertEqual(got[(1, 1, 1)], ["light.dj_segment_1", "light.dj_segment_3"])
+        self.assertEqual(got[(2, 2, 2)], ["light.dj_segment_2"])
+
+    def test_plain_show_on_a_segmented_light_never_touches_the_parent(self):
+        light, sess = self.make({})
+        light.show((9, 9, 9))
+        self.assertTrue(all("light.dj_segment_" in str(d["entity_id"]) and d["entity_id"] != "light.dj" for _, d in sess.calls))
+
+    def test_snapshot_and_restore_go_part_by_part(self):
+        states = {"light.dj_segment_%d" % i: {"state": "on", "attributes": {"brightness": 50 + i, "rgb_color": [i, i, i], "color_mode": "rgb"}}
+                  for i in (1, 2, 3)}
+        states["light.dj_segment_3"]["state"] = "off"
+        light, sess = self.make(states)
+        snap = light.snapshot()
+        self.assertEqual(len(snap["parts"]), 3)
+        light.restore(snap, "off")
+        by_ent = {d["entity_id"]: (svc, d) for svc, d in sess.calls}
+        self.assertEqual(by_ent["light.dj_segment_1"][1]["rgb_color"], [1, 1, 1])
+        self.assertEqual(by_ent["light.dj_segment_3"][0], "turn_off")
+
+    def test_restore_brings_back_the_scene_the_light_was_playing(self):
+        sess = FakeSession({"light.x": {"state": "on", "attributes": {"brightness": 90, "rgb_color": [1, 2, 3], "color_mode": "rgb", "effect": "Aurora"}}})
+        light = g.HaLight("light.x", "http://ha", "T", sess)
+        light.restore(light.snapshot(), "off")
+        self.assertEqual(sess.calls[-1][1]["effect"], "Aurora")
+
+    def test_list_ha_lights_reports_segment_counts(self):
+        class R:
+            def __init__(self, code, body, j=None):
+                self.status_code, self.text, self._j = code, body, j
+
+            def json(self):
+                return self._j
+
+        class S:
+            def post(self, url, **kw):
+                return R(404, "")
+
+            def get(self, url, **kw):
+                ents = ["light.dj"] + ["light.dj_segment_%d" % i for i in range(1, 13)] + ["light.plain", "light.bed", "light.bed_segments"]
+                return R(200, "", [{"entity_id": e, "state": "on", "attributes": {}} for e in ents])
+
+        got = {x["id"]: x["segments"] for x in g.list_ha_lights("http://ha", "T", False, S())}
+        self.assertEqual(got, {"light.dj": 12, "light.plain": 1, "light.bed": 1})
 
 
 if __name__ == "__main__":

@@ -231,5 +231,58 @@ class Playing(Base):
         self.assertTrue(all(a == "Bearer " + TOKEN for _, a in calls))
 
 
+class SegmentTests(Base):
+    def test_segments_survive_save_and_reach_the_sports_plugins(self):
+        r = self.c.post("/api/config", json={"enabled": True, "lights": [{"id": "127.0.0.1:14003", "segments": 8}],
+                                             "events": {"score": {"effect": "chase", "seconds": 4}}, "cooldown_seconds": 0})
+        self.assertEqual(r.get_json()["config"]["lights"][0]["segments"], 8)
+        fx = g.GoveeFX(None, central=self.dir / "govee_fx.json", sport="nhl")
+        self.assertEqual(fx.lights[0].segments, 8)
+        fx.trigger("score", "013369", "ffb612")
+        self.assertTrue(fx.wait(10))
+        fx.close()
+        self.assertTrue(any(c[0] == "ptReal" for c in self.dev.cmds))
+
+    def test_test_button_uses_the_section_counts_on_the_page(self):
+        self.c.post("/api/test", json={"lights": ["127.0.0.1:14003"], "segments": {"127.0.0.1:14003": 6},
+                                       "spec": {"effect": "chase", "seconds": 4}})
+        self.wait_test()
+        self.assertTrue(any(c[0] == "ptReal" for c in self.dev.cmds))
+        self.assertEqual(self.dev.state["onOff"], 1)
+
+    def test_sweep_lights_each_section_in_turn_then_restores(self):
+        import base64
+        self.assertEqual(self.c.post("/api/segments", json={"id": "127.0.0.1:14003", "count": 5}).status_code, 200)
+        st = self.wait_test(20)
+        self.assertTrue(st["ok"], st)
+        masks = []
+        for cmd, data in self.dev.cmds:
+            if cmd == "ptReal":
+                for pkt in data["command"]:
+                    raw = base64.b64decode(pkt)
+                    if raw[4:7] == bytes([255, 255, 255]):
+                        masks.append(raw[12] | raw[13] << 8)
+        self.assertEqual(masks, [1, 2, 4, 8, 16])
+        self.assertEqual(self.dev.state["color"], {"r": 10, "g": 20, "b": 30})
+
+    def test_sweep_refuses_bad_ids_and_plain_ha_lights(self):
+        self.assertEqual(self.c.post("/api/segments", json={"id": "8.8.8.8"}).status_code, 409)
+        self.assertEqual(self.c.post("/api/segments", json={"id": "light.bed", "count": 1}).status_code, 409)
+
+    def test_ha_lights_list_reports_sections(self):
+        net = self.net
+        orig = net.get
+        net.get = lambda url, **kw: Resp([{"entity_id": "light.dj", "state": "on", "attributes": {}}] +
+                                         [{"entity_id": "light.dj_segment_%d" % i, "state": "on", "attributes": {}} for i in range(1, 8)])             if url.endswith("/api/states") else orig(url, **kw)
+        net.post = lambda url, **kw: Resp(text="x")
+        j = self.c.get("/api/ha/lights?all=1").get_json()
+        self.assertEqual([(l["id"], l["segments"]) for l in j["lights"]], [("light.dj", 7)])
+
+    def test_previews_for_a_segmented_light(self):
+        j = self.c.post("/api/previews", json={"primary": "013369", "accent": "ffb612", "segments": 6}).get_json()
+        self.assertTrue(all(v["segments"] == 6 for v in j.values()))
+        self.assertEqual(self.c.post("/api/previews", json={"segments": "junk"}).get_json()["burst"]["segments"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
