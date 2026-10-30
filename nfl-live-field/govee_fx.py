@@ -309,13 +309,12 @@ class LanLight:
                 self.net.send(self.ip, "colorwc", {"color": {"r": 0, "g": 0, "b": 0}, "colorTemInKelvin": 2700}, self.port)
                 self.net.send(self.ip, "brightness", {"value": 60}, self.port)
             return
-        if not snap.get("onOff"):
-            self.net.send(self.ip, "turn", {"value": 0}, self.port)
-            return
-        col = snap.get("color") or {}
+        col = snap.get("color") or {}      # an "off" light still remembers its colour, so put that back first
         self.net.send(self.ip, "colorwc", {"color": {"r": col.get("r", 0), "g": col.get("g", 0), "b": col.get("b", 0)},
                                            "colorTemInKelvin": snap.get("colorTemInKelvin", 0)}, self.port)
         self.net.send(self.ip, "brightness", {"value": snap.get("brightness", 100)}, self.port)
+        if not snap.get("onOff"):
+            self.net.send(self.ip, "turn", {"value": 0}, self.port)
 
 
 class HaLight:
@@ -353,10 +352,10 @@ class HaLight:
             if fallback == "off":
                 self._call("turn_off", {})
             return
+        at = snap["attributes"]            # an off light's attributes are empty in HA, so only restore when on
         if snap["state"] == "off":
             self._call("turn_off", {})
             return
-        at = snap["attributes"]
         data: Dict[str, Any] = {}
         if at.get("brightness") is not None:
             data["brightness"] = at["brightness"]

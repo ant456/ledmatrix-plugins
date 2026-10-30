@@ -147,6 +147,9 @@ class Lan(unittest.TestCase):
         wait_done(fx)
         fx.close()
         self.assertEqual(self.dev.cmds[-1], ("turn", {"value": 0}))
+        # the colour it was last set to is put back first, so it comes on the same way next time
+        self.assertEqual(self.dev.cmds[-3], ("colorwc", {"color": {"r": 10, "g": 20, "b": 30}, "colorTemInKelvin": 0}))
+        self.assertEqual(self.dev.cmds[-2], ("brightness", {"value": 42}))
 
     def test_disabled_and_off_events_do_nothing(self):
         fx = g.GoveeFX({"enabled": False, "devices": ["127.0.0.1:14003"]})
