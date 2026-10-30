@@ -38,6 +38,13 @@ class FakeLight:
                 self.sock.sendto(reply, (addr[0], g.LISTEN_PORT))
             else:
                 self.cmds.append((m["cmd"], m["data"]))
+                d = m["data"]
+                if m["cmd"] == "turn":
+                    self.state["onOff"] = d["value"]
+                elif m["cmd"] == "brightness":
+                    self.state["brightness"] = d["value"]
+                elif m["cmd"] == "colorwc":
+                    self.state["color"] = d["color"]
 
     def stop(self):
         self.run = False
@@ -137,8 +144,10 @@ class Lan(unittest.TestCase):
         cmds = self.dev.cmds
         self.assertEqual(cmds[0][0], "turn")
         self.assertGreater(sum(1 for c in cmds if c[0] == "colorwc"), 6)
-        self.assertEqual(cmds[-2], ("colorwc", {"color": {"r": 10, "g": 20, "b": 30}, "colorTemInKelvin": 0}))
-        self.assertEqual(cmds[-1], ("brightness", {"value": 42}))
+        self.assertEqual(cmds[-3], ("colorwc", {"color": {"r": 10, "g": 20, "b": 30}, "colorTemInKelvin": 0}))
+        self.assertEqual(cmds[-2], ("brightness", {"value": 42}))
+        self.assertEqual(cmds[-1], ("turn", {"value": 1}))
+        self.assertEqual(self.dev.state["onOff"], 1)
 
     def test_light_that_was_off_goes_back_off(self):
         self.dev.state["onOff"] = 0
@@ -150,6 +159,28 @@ class Lan(unittest.TestCase):
         # the colour it was last set to is put back first, so it comes on the same way next time
         self.assertEqual(self.dev.cmds[-3], ("colorwc", {"color": {"r": 10, "g": 20, "b": 30}, "colorTemInKelvin": 0}))
         self.assertEqual(self.dev.cmds[-2], ("brightness", {"value": 42}))
+
+    def test_restore_retries_when_the_light_ignores_turn_off(self):
+        self.dev.state["onOff"] = 1
+        dropped = {"n": 0}
+
+        fx = self.make()
+        light = fx.lights[0]
+        net_send = light.net.send
+
+        def flaky(ip, cmd, data, port=g.CONTROL_PORT):
+            if cmd == "turn" and data["value"] == 0 and dropped["n"] < 2:
+                dropped["n"] += 1          # the first two turn-offs are lost
+                return
+            net_send(ip, cmd, data, port)
+        light.net.send = flaky
+        try:
+            light.restore({"onOff": 0, "brightness": 42, "color": {"r": 1, "g": 2, "b": 3}, "colorTemInKelvin": 0}, "off")
+        finally:
+            light.net.send = net_send
+        fx.close()
+        self.assertEqual(dropped["n"], 2)
+        self.assertEqual(self.dev.state["onOff"], 0)
 
     def test_disabled_and_off_events_do_nothing(self):
         fx = g.GoveeFX({"enabled": False, "devices": ["127.0.0.1:14003"]})

@@ -310,11 +310,18 @@ class LanLight:
                 self.net.send(self.ip, "brightness", {"value": 60}, self.port)
             return
         col = snap.get("color") or {}      # an "off" light still remembers its colour, so put that back first
-        self.net.send(self.ip, "colorwc", {"color": {"r": col.get("r", 0), "g": col.get("g", 0), "b": col.get("b", 0)},
-                                           "colorTemInKelvin": snap.get("colorTemInKelvin", 0)}, self.port)
-        self.net.send(self.ip, "brightness", {"value": snap.get("brightness", 100)}, self.port)
-        if not snap.get("onOff"):
-            self.net.send(self.ip, "turn", {"value": 0}, self.port)
+        want_on = 1 if snap.get("onOff") else 0
+        for _ in range(3):                 # UDP can drop a packet, and a light is deaf for a moment after a burst
+            self.net.send(self.ip, "colorwc", {"color": {"r": col.get("r", 0), "g": col.get("g", 0), "b": col.get("b", 0)},
+                                               "colorTemInKelvin": snap.get("colorTemInKelvin", 0)}, self.port)
+            time.sleep(0.15)
+            self.net.send(self.ip, "brightness", {"value": snap.get("brightness", 100)}, self.port)
+            time.sleep(0.15)
+            self.net.send(self.ip, "turn", {"value": want_on}, self.port)
+            time.sleep(0.4)
+            now = self.net.query(self.ip, self.port, timeout=1.0)
+            if now is None or bool(now.get("onOff")) == bool(want_on):
+                return
 
 
 class HaLight:
