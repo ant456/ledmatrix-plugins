@@ -619,3 +619,72 @@ def test_the_configured_logo_reaches_the_frame(tmp_path):
     q.update()
     assert q.display() is True
     assert (0, 200, 255) not in {c for _, c in q.display_manager.image.crop((58, 31, 128, 53)).getcolors(5000)}
+
+
+# ---- Govee lights follow the score ---------------------------------------------------------
+
+class GoveeRecorder:
+    def __init__(self):
+        self.calls = []
+
+    def trigger(self, event, primary="ffffff", accent="ffffff"):
+        self.calls.append((event, primary, accent))
+        return True
+
+    def configure(self, cfg):
+        pass
+
+    def close(self):
+        pass
+
+
+def govee_scene(favorites, **extra):
+    probe = make()
+    probe.update()
+    score_now(probe)
+    alert = probe._alerts[0]
+    p = make({"favorite_teams": [t for t in favorites(alert)], **extra})
+    p.govee = GoveeRecorder()
+    p.update()
+    score_now(p)
+    return p, alert
+
+
+def test_govee_fires_in_the_scoring_teams_colours():
+    p, a = govee_scene(lambda a: [a["team"]])
+    assert len(p.govee.calls) == 1
+    event, primary, accent = p.govee.calls[0]
+    assert event in ("score", "big_score")
+    assert (primary, accent) == (a["primary"], a["accent"])
+
+
+def test_govee_against_when_the_other_side_scores_on_a_favorite():
+    p, a = govee_scene(lambda a: [a["opp"]])
+    assert [c[0] for c in p.govee.calls] == ["against"]
+    assert p._alerts == []              # still no burst on the panel
+
+
+def test_govee_quiet_for_games_without_a_favorite():
+    p, a = govee_scene(lambda a: ["ZZZ"])
+    assert p.govee.calls == []
+
+
+def test_govee_treats_every_team_as_a_score_when_no_favorites_are_set():
+    p, a = govee_scene(lambda a: [])
+    assert [c[0] for c in p.govee.calls] in (["score"], ["big_score"])
+
+
+def test_govee_follows_the_panel_alert_setting():
+    p, a = govee_scene(lambda a: [a["team"]], score_alerts=False)
+    assert p.govee.calls == []
+
+
+def test_govee_is_off_by_default_and_a_broken_light_cannot_break_the_plugin():
+    p = make({"favorite_teams": ["KC"]})
+    assert p.govee.enabled is False
+    class Boom(GoveeRecorder):
+        def trigger(self, *a, **k):
+            raise RuntimeError("light on fire")
+    q, a = govee_scene(lambda a: [a["team"]])
+    q.govee = Boom()
+    score_now(q)                        # must not raise

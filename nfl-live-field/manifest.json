@@ -1,7 +1,7 @@
 {
   "id": "nfl-live-field",
   "name": "NFL Live Field",
-  "version": "1.2.4",
+  "version": "1.3.0",
   "author": "ant456",
   "description": "An arcade-style NFL show with three modes: live games (animated field, player cards with ESPN headshots and rarity frames, touchdown bursts with confetti), recently finished games (final score plus the same stat cards), and upcoming games (matchup and kickoff time). Pick favorite teams and switch on the favorites lock to show only their games in every mode. ESPN's public scoreboard, no API key.",
   "entry_point": "manager.py",
@@ -31,6 +31,12 @@
     ">=3.0.0"
   ],
   "versions": [
+    {
+      "version": "1.3.0",
+      "released": "2026-10-30",
+      "ledmatrix_min": "2.0.0",
+      "notes": "Optional Govee light effects in the scoring team's colours (LAN or Home Assistant): burst, flash, pulse, chase, strobe, fireworks and glow, with the lights restored afterwards."
+    },
     {
       "version": "1.2.4",
       "released": "2026-10-26",

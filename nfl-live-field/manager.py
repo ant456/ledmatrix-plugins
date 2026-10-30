@@ -44,6 +44,7 @@ import nfllive_demo as demo
 import nfllive_draw as draw
 import nfllive_model as model
 import nfllive_render as render
+from govee_fx import GoveeFX
 from nfllive_data import NflLiveData
 from nfllive_headshots import HeadshotStore
 
@@ -74,6 +75,7 @@ class NflLiveFieldPlugin(BasePlugin):
                  cache_manager, plugin_manager):
         super().__init__(plugin_id, config, display_manager, cache_manager, plugin_manager)
         self._load_config(config)
+        self.govee = GoveeFX(config.get("govee"), self.logger)
         self.data = NflLiveData(cache_manager, self.logger, plugin_id, self.request_timeout)
         self.headshots = HeadshotStore(self.data, self.logger)
 
@@ -159,6 +161,7 @@ class NflLiveFieldPlugin(BasePlugin):
         super().on_config_change(new_config)
         self.config = new_config
         self._load_config(new_config)
+        self.govee.configure(new_config.get("govee"))
         self.data.timeout = float(self.request_timeout)
         self.modes = self._available_modes()
         self._frame_cache.clear()
@@ -282,11 +285,31 @@ class NflLiveFieldPlugin(BasePlugin):
                 side = model.scoring_change(self._previous.get(game_id), game)
                 if not side or not game["live"] or model.involves(game, self.exclude):
                     continue
+                alert = model.build_alert(self._previous[game_id], game, side, now)
+                self._govee_alert(game, alert)
                 if game[side]["abbr"] in self.favorites or self.alert_all or not self.favorites:
                     if self.lock and self.favorites and not model.involves(game, self.favorites):
                         continue
-                    self._alerts.append(model.build_alert(self._previous[game_id], game, side, now))
+                    self._alerts.append(alert)
         self._previous = current
+
+    GOVEE_BIG = {"TOUCHDOWN"}
+
+    def _govee_alert(self, game: Dict[str, Any], alert: Dict[str, Any]) -> None:
+        """Flash the Govee lights for this score: 'score' for a favorite (or any team when none are set),
+        'against' when the other side scores on a favorite. Never raises."""
+        try:
+            abbr = game[alert["side"]]["abbr"]
+            if self.favorites and abbr not in self.favorites:
+                event = "against" if model.involves(game, self.favorites) else ("score" if self.alert_all else None)
+            else:
+                event = "score"
+            if event == "score" and alert.get("kind") in self.GOVEE_BIG:
+                event = "big_score"
+            if event:
+                self.govee.trigger(event, alert.get("primary"), alert.get("accent"))
+        except Exception as exc:  # noqa: BLE001 - lights must never break the display
+            self.logger.debug("Govee trigger skipped: %s", exc)
 
     def _game_now(self, game_id: str) -> Optional[Dict[str, Any]]:
         for g in self.all_games:
@@ -445,6 +468,7 @@ class NflLiveFieldPlugin(BasePlugin):
         return info
 
     def cleanup(self) -> None:
+        self.govee.close()
         self._frame_cache.clear()
         try:
             self.data.session.close()

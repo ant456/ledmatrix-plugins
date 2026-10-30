@@ -353,6 +353,71 @@
           "description": "Show made-up live games with leaders, photos and a touchdown burst every few updates, instead of real data, to try the look and the favorites lock offline"
         }
       }
+    },
+    "govee": {
+      "type": "object",
+      "title": "Govee lights",
+      "description": "Flash Govee lights in the scoring team's colours. Off by default.",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turn the light effects on"
+        },
+        "devices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Lights to flash. A LAN address (192.168.0.50; turn on LAN Control for the light in the Govee Home app) or a Home Assistant light.entity_id. Several lights run the effect a moment apart so the colour travels along them"
+        },
+        "ha_url": {
+          "type": "string",
+          "default": "",
+          "description": "Home Assistant address, only needed for light.entity_id devices"
+        },
+        "ha_token": {
+          "type": "string",
+          "default": "",
+          "description": "Home Assistant long-lived access token, only needed for light.entity_id devices"
+        },
+        "events": {
+          "type": "object",
+          "default": {},
+          "description": "Effect per event: score (a favorite scores), big_score (touchdowns), against (the other side scores on a favorite; off by default). Each is {\"effect\": name, \"seconds\": n} or just the effect name. Effects: burst, flash, pulse, chase, strobe, fireworks, glow, off"
+        },
+        "colors": {
+          "type": "object",
+          "default": {},
+          "description": "Override the team colours for an event, for example {\"score\": {\"primary\": \"00ff00\", \"accent\": \"ffffff\"}}"
+        },
+        "cooldown_seconds": {
+          "type": "number",
+          "default": 3,
+          "minimum": 0,
+          "maximum": 60,
+          "description": "Minimum gap between two effects"
+        },
+        "stagger_seconds": {
+          "type": "number",
+          "default": 0.15,
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Delay between lights"
+        },
+        "restore_fallback": {
+          "type": "string",
+          "enum": [
+            "off",
+            "warm",
+            "leave"
+          ],
+          "default": "off",
+          "description": "What to do afterwards if a light's earlier state could not be read"
+        }
+      }
     }
   }
 }
