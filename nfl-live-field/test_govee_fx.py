@@ -5,6 +5,8 @@ import threading
 import time
 import unittest
 
+import os
+os.environ["LEDMATRIX_GOVEE_CONFIG"] = os.path.join(os.path.dirname(os.path.abspath(__file__)), "no-such-central.json")
 import govee_fx as g
 
 g.GoveeFX.time_scale = 20.0
@@ -269,6 +271,179 @@ class HomeAssistant(unittest.TestCase):
         wait_done(fx)
         fx.close()
         self.assertEqual(sess.calls[-1][1]["color_temp_kelvin"], 3000)
+
+
+class CentralConfig(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        import pathlib
+        self.dir = pathlib.Path(tempfile.mkdtemp())
+        self.file = self.dir / "govee_fx.json"
+        self.dev = FakeLight(14003)
+
+    def tearDown(self):
+        self.dev.stop()
+
+    def write(self, **over):
+        raw = {"enabled": True, "lights": [{"id": "127.0.0.1:14003", "label": "Desk", "enabled": True}],
+               "events": {"score": {"effect": "glow", "seconds": 4}}, "cooldown_seconds": 0}
+        raw.update(over)
+        g.save_central(self.file, raw)
+
+    def test_valid_light_ids(self):
+        for ok in ("192.168.0.5", "10.0.0.2:4003", "172.16.4.4", "light.tv_backlight"):
+            self.assertTrue(g.valid_light_id(ok), ok)
+        for bad in ("8.8.8.8", "169.254.1.1", "light.", "light.A B", "", None, "192.168.0.5; rm", "http://x"):
+            self.assertFalse(g.valid_light_id(bad), bad)
+
+    def test_clean_config_fills_defaults_and_drops_junk(self):
+        c = g.clean_config({"lights": [{"id": "8.8.8.8"}, {"id": "192.168.0.9", "label": "x" * 99},
+                                      {"id": "192.168.0.9"}, "nope"],
+                            "events": {"score": {"effect": "rm -rf", "seconds": 999, "colors": {"primary": "zz"}}},
+                            "sports": {"nfl": False, "BAD KEY": True}, "cooldown_seconds": "abc", "restore_fallback": "x"})
+        self.assertEqual([l["id"] for l in c["lights"]], ["192.168.0.9"])
+        self.assertEqual(len(c["lights"][0]["label"]), 40)
+        self.assertEqual(c["events"]["score"]["effect"], "burst")          # unknown effect ignored
+        self.assertEqual(c["events"]["score"]["seconds"], 30.0)            # clamped
+        self.assertEqual(c["events"]["score"]["colors"], "team")
+        self.assertFalse(c["sports"]["nfl"])
+        self.assertNotIn("BAD KEY", c["sports"])
+        self.assertEqual(c["cooldown_seconds"], g.MIN_GAP)
+        self.assertEqual(c["restore_fallback"], "off")
+        self.assertFalse(c["enabled"])
+        self.assertFalse(c["events"]["against"]["enabled"])
+
+    def test_clean_config_is_idempotent(self):
+        c = g.clean_config({"lights": [{"id": "192.168.0.9"}], "events": {"score": {"colors": {"primary": "#AABBCC"}}}})
+        self.assertEqual(g.clean_config(c), c)
+        self.assertEqual(c["events"]["score"]["colors"], {"primary": "aabbcc", "accent": "ffffff"})
+
+    def test_central_to_cfg_applies_sport_override_and_disabled_flags(self):
+        raw = {"enabled": True, "lights": [{"id": "192.168.0.9", "enabled": True}, {"id": "192.168.0.10", "enabled": False}],
+               "sports": {"nba": False},
+               "events": {"score": {"effect": "burst"}, "against": {"enabled": False}},
+               "sport_events": {"nfl": {"score": {"effect": "chase", "seconds": 7}}}}
+        nfl = g.central_to_cfg(raw, "nfl")
+        self.assertEqual(nfl["devices"], ["192.168.0.9"])                  # the switched-off light is left out
+        self.assertEqual(nfl["events"]["score"], {"effect": "chase", "seconds": 7.0})
+        self.assertEqual(nfl["events"]["against"]["effect"], "off")
+        nhl = g.central_to_cfg(raw, "nhl")
+        self.assertEqual(nhl["events"]["score"]["effect"], "burst")
+        self.assertFalse(g.central_to_cfg(raw, "nba")["enabled"])          # that sport is switched off
+
+    def test_ha_credentials_come_from_the_ledmatrix_config(self):
+        cfg = self.dir / "config.json"
+        cfg.write_text(json.dumps({"x": {"a": 1}, "house-hud": {"ha_url": "http://ha", "ha_token": "T"}}))
+        self.assertEqual(g.ha_credentials(cfg), ("http://ha", "T"))
+        self.assertEqual(g.ha_credentials(self.dir / "missing.json"), ("", ""))
+        out = g.central_to_cfg({"enabled": True}, "nfl", cfg)
+        self.assertEqual((out["ha_url"], out["ha_token"]), ("http://ha", "T"))
+        self.write()
+        self.assertNotIn("ha_token", self.file.read_text())                # the token is never copied into the file
+
+    def test_save_is_atomic_and_keeps_a_backup(self):
+        self.write()
+        first = self.file.read_text()
+        self.write(cooldown_seconds=5)
+        self.assertTrue((self.dir / "govee_fx.json.bak").exists())
+        self.assertEqual((self.dir / "govee_fx.json.bak").read_text(), first)
+        self.assertFalse((self.dir / "govee_fx.tmp").exists())
+
+    def test_plugin_uses_the_central_file_and_follows_edits(self):
+        self.write()
+        fx = g.GoveeFX({"enabled": False}, central=self.file, sport="nfl")
+        self.assertTrue(fx.enabled)
+        self.assertEqual(len(fx.lights), 1)
+        self.assertEqual(fx.events["score"]["effect"], "glow")
+        self.write(events={"score": {"effect": "pulse"}})
+        os.utime(self.file, (time.time() + 5, time.time() + 5))             # coarse file clocks
+        fx.trigger("score", "013369", "ffb612")                             # sees the new file
+        self.assertEqual(fx.events["score"]["effect"], "pulse")
+        wait_done(fx)
+        fx.close()
+
+    def test_switched_off_sport_never_fires(self):
+        self.write(sports={"nhl": False})
+        fx = g.GoveeFX(None, central=self.file, sport="nhl")
+        self.assertFalse(fx.trigger("score", "013369", "ffb612"))
+        fx.close()
+        self.assertEqual(self.dev.cmds, [])
+
+    def test_custom_colours_are_used_exactly(self):
+        self.write(events={"score": {"effect": "glow", "colors": {"primary": "123456", "accent": "654321"}}})
+        fx = g.GoveeFX(None, central=self.file, sport="nfl")
+        fx.trigger("score", "ff0000", "00ff00")
+        wait_done(fx)
+        fx.close()
+        seen = {tuple(c[1]["color"].values()) for c in self.dev.cmds if c[0] == "colorwc"}
+        self.assertIn((0x12, 0x34, 0x56), seen)
+        self.assertNotIn((255, 0, 0), seen)
+
+    def test_central_file_removed_falls_back_to_the_plugin_block(self):
+        self.write()
+        fx = g.GoveeFX({"enabled": False}, central=self.file, sport="nfl")
+        self.assertTrue(fx.enabled)
+        self.file.unlink()
+        fx.trigger("score")
+        self.assertFalse(fx.enabled)
+        fx.close()
+
+    def test_broken_central_file_does_not_crash(self):
+        self.file.write_text("{ not json")
+        fx = g.GoveeFX({"enabled": False}, central=self.file, sport="nfl")
+        self.assertFalse(fx.trigger("score"))
+        fx.close()
+
+    def test_two_plugins_take_turns_instead_of_fighting_over_the_lights(self):
+        self.write(events={"score": {"effect": "glow", "seconds": 4}})
+        a = g.GoveeFX(None, central=self.file, sport="nfl")
+        b = g.GoveeFX(None, central=self.file, sport="nba")
+        a.trigger("score", "013369", "ffb612")
+        time.sleep(0.2)
+        b.trigger("score", "ff0000", "ffffff")
+        self.assertTrue(a.wait(10) and b.wait(10))
+        a.close()
+        b.close()
+        self.assertEqual(self.dev.state["onOff"], 1)                        # restored to how the fake started
+
+    def test_preview_matches_the_effect(self):
+        pv = g.preview("burst", "013369", "ffb612", 6)
+        self.assertEqual(pv["seconds"], 6.0)
+        self.assertGreater(len(pv["steps"]), 5)
+        self.assertEqual(pv["steps"][0][1], [255, 255, 255])
+        self.assertEqual(g.preview("nope", "013369", "ffb612", 99)["seconds"], 30.0)
+
+    def test_every_picker_effect_has_a_description(self):
+        self.assertEqual(set(g.PICKABLE), set(g.EFFECTS) - {"identify"})
+
+    def test_light_status_reports_reachable_and_not(self):
+        st = g.light_status(["127.0.0.1:14003", "127.0.0.2:14999"])
+        self.assertTrue(st["127.0.0.1:14003"]["ok"])
+        self.assertFalse(st["127.0.0.2:14999"]["ok"])
+
+    def test_list_ha_lights_hides_segments_and_filters_to_govee(self):
+        class R:
+            def __init__(self, code, body, j=None):
+                self.status_code, self.text, self._j = code, body, j
+
+            def json(self):
+                return self._j
+
+        class S:
+            def post(self, url, **kw):
+                return R(200, json.dumps(["light.bed", "light.bed_segments", "light.tv"]))
+
+            def get(self, url, **kw):
+                return R(200, "", [{"entity_id": "light.bed", "state": "on", "attributes": {"friendly_name": "Bed"}},
+                                   {"entity_id": "light.bed_segments", "state": "on", "attributes": {}},
+                                   {"entity_id": "light.hue", "state": "on", "attributes": {}},
+                                   {"entity_id": "light.tv_segment_3", "state": "on", "attributes": {}},
+                                   {"entity_id": "light.tv", "state": "off", "attributes": {"friendly_name": "TV"}},
+                                   {"entity_id": "sensor.x", "state": "1", "attributes": {}}])
+
+        got = g.list_ha_lights("http://ha", "T", True, S())
+        self.assertEqual([x["id"] for x in got], ["light.bed", "light.tv"])
+        self.assertEqual([x["id"] for x in g.list_ha_lights("http://ha", "T", False, S())], ["light.bed", "light.hue", "light.tv"])
 
 
 if __name__ == "__main__":

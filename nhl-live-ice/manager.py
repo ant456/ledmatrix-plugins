@@ -82,7 +82,7 @@ class NhlLiveIcePlugin(BasePlugin):
                  cache_manager, plugin_manager):
         super().__init__(plugin_id, config, display_manager, cache_manager, plugin_manager)
         self._load_config(config)
-        self.govee = GoveeFX(config.get("govee"), self.logger)
+        self.govee = GoveeFX(config.get("govee"), self.logger, sport="nhl")
         self.data = NhlLiveData(cache_manager, self.logger, plugin_id, self.request_timeout)
         self.headshots = HeadshotStore(self.data, self.logger)
 

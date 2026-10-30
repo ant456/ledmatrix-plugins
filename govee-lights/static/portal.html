@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Govee Lights</title>
+<style>
+:root {
+  --bg: #0a0a0f; --panel: #14141d; --panel2: #1b1b27; --line: #2a2a3a;
+  --text: #e8e8f0; --dim: #8c8ca3; --coin: #ffd60a; --cyan: #3de0ff; --ok: #33d17a; --bad: #ff5c5c;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; padding-bottom: 84px; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 16px; }
+header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 16px; }
+h1 { font-size: 18px; letter-spacing: 3px; color: var(--coin); margin: 0; flex: 1; min-width: 180px; }
+h2 { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--cyan); margin: 0 0 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.dim { color: var(--dim); } .small { font-size: 12px; }
+.banner { border: 1px solid var(--coin); background: rgba(255,214,10,.08); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+button { font: inherit; color: var(--text); }
+.btn { background: var(--panel2); border: 1px solid var(--line); padding: 8px 12px; border-radius: 6px; cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--cyan); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn.primary { background: var(--coin); color: #111; border-color: var(--coin); font-weight: 600; }
+.btn.big { padding: 14px 26px; font-size: 16px; letter-spacing: 2px; }
+.btn.x:hover:not(:disabled) { border-color: var(--bad); color: var(--bad); }
+input[type=text], select { background: var(--panel2); border: 1px solid var(--line); color: var(--text); padding: 8px 10px; border-radius: 6px; font: inherit; min-width: 0; }
+input[type=text]:focus, select:focus, .btn:focus-visible, .fx:focus-visible, .switch input:focus-visible + span { outline: 2px solid var(--cyan); outline-offset: 1px; }
+input[type=color] { width: 44px; height: 34px; padding: 2px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
+input[type=range] { accent-color: var(--coin); flex: 1; min-width: 120px; }
+
+/* switch */
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; flex: none; }
+.switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; z-index: 1; width: 100%; height: 100%; }
+.switch span { position: absolute; inset: 0; background: var(--panel2); border: 1px solid var(--line); border-radius: 24px; transition: .15s; }
+.switch span::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--dim); transition: .15s; }
+.switch input:checked + span { background: rgba(51,209,122,.2); border-color: var(--ok); }
+.switch input:checked + span::after { left: 23px; background: var(--ok); }
+
+/* lights */
+.light { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.light:last-child { border-bottom: 0; }
+.light.off .name, .light.off .meta { opacity: .45; }
+.light .name { width: 100%; }
+.meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; color: var(--dim); font-size: 12px; }
+.chip { border: 1px solid var(--line); border-radius: 20px; padding: 1px 8px; font-size: 11px; color: var(--dim); }
+.chip.lan { color: var(--cyan); border-color: rgba(61,224,255,.4); } .chip.ha { color: var(--coin); border-color: rgba(255,214,10,.4); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--dim); }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); }
+.acts { display: flex; gap: 6px; }
+.picker { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 10px; }
+.picker .list { max-height: 260px; overflow: auto; margin-top: 8px; }
+.pick { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.pick > div { min-width: 0; overflow-wrap: anywhere; }
+
+/* chips for sports and scope */
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg button { background: var(--panel2); border: 1px solid var(--line); border-radius: 20px; padding: 6px 14px; cursor: pointer; }
+.seg button.on { background: var(--cyan); border-color: var(--cyan); color: #06222a; font-weight: 600; }
+.seg button.muted { opacity: .5; }
+.sportswitch { display: flex; align-items: center; gap: 8px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+
+/* events */
+.event { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+.event:first-of-type { border-top: 0; margin-top: 6px; padding-top: 0; }
+.event.off .fxgrid, .event.off .opts { opacity: .4; pointer-events: none; }
+.evhead { display: flex; gap: 10px; align-items: center; }
+.evhead b { font-size: 15px; }
+.fxgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 8px; margin: 12px 0; }
+.fx { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 6px; }
+.fx:hover { border-color: var(--dim); }
+.fx.on { border-color: var(--coin); box-shadow: 0 0 0 1px var(--coin); }
+.fx .sw { height: 34px; border-radius: 6px; background: #000; transition: none; }
+.fx b { font-size: 13px; text-transform: capitalize; }
+.fx small { color: var(--dim); font-size: 11px; line-height: 1.3; }
+.opts { display: flex; gap: 14px 22px; flex-wrap: wrap; align-items: center; }
+.opts label.k { color: var(--dim); font-size: 12px; margin-right: 6px; }
+.tag { font-size: 11px; border-radius: 4px; padding: 2px 6px; background: rgba(255,214,10,.14); color: var(--coin); }
+
+/* test */
+.testgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.testgrid label { display: block; color: var(--dim); font-size: 12px; margin-bottom: 4px; }
+.testgrid select { width: 100%; }
+.checks { display: flex; gap: 6px 14px; flex-wrap: wrap; margin: 6px 0 14px; }
+.checks label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.teamdots { display: inline-flex; gap: 3px; vertical-align: middle; margin-left: 6px; }
+.teamdots i { width: 14px; height: 14px; border-radius: 50%; border: 1px solid #0006; }
+#teststatus { min-height: 20px; margin-top: 10px; }
+.ok { color: var(--ok); } .bad { color: var(--bad); }
+
+/* save bar */
+#bar { position: fixed; left: 0; right: 0; bottom: 0; background: rgba(10,10,15,.96); border-top: 1px solid var(--line); padding: 12px 16px; z-index: 5; }
+#bar .in { max-width: 980px; margin: 0 auto; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+#toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--line); padding: 9px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 6; max-width: 90vw; }
+#toast.show { opacity: 1; } #toast.err { border-color: var(--bad); color: var(--bad); }
+@media (max-width: 560px) { .light { grid-template-columns: auto 1fr; } .light .acts { grid-column: 1 / -1; } }
+@media (prefers-reduced-motion: reduce) { .switch span, .switch span::after { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>GOVEE LIGHTS</h1>
+    <label class="row" title="Master switch for every sports plugin"><span class="switch"><input type="checkbox" id="master" aria-label="Lights react to games"><span></span></span><b id="masterlabel">Lights react to games</b></label>
+  </header>
+  <div id="banner"></div>
+
+  <div class="card" id="lightscard">
+    <h2>1 · Lights</h2>
+    <p class="dim small" style="margin-top:-4px">Switch a light off here to leave it alone during games. Everything is put back exactly as it was afterwards.</p>
+    <div id="lights"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="scan">Scan for LAN lights</button>
+      <button class="btn" id="addha">Add from Home Assistant</button>
+      <button class="btn" id="addip">Add by address</button>
+      <button class="btn" id="refresh" title="Check which lights answer">Check lights</button>
+      <span class="dim small" id="scanmsg"></span>
+    </div>
+    <div id="picker"></div>
+  </div>
+
+  <div class="card">
+    <h2>2 · Sports</h2>
+    <div class="row" id="sports"></div>
+  </div>
+
+  <div class="card">
+    <h2>3 · Effects</h2>
+    <div class="row" style="margin-bottom:4px"><span class="dim small">Settings for</span><div class="seg" id="scope"></div></div>
+    <div id="events"></div>
+  </div>
+
+  <div class="card">
+    <h2>4 · Test</h2>
+    <p class="dim small" style="margin-top:-4px">Plays exactly what is on this page, saved or not, on the lights ticked below, then puts them back.</p>
+    <div class="testgrid">
+      <div><label for="tsport">Sport</label><select id="tsport"></select></div>
+      <div><label for="tteam">Team (for its colors)</label><select id="tteam"></select></div>
+      <div><label for="tevent">Moment</label><select id="tevent"></select></div>
+    </div>
+    <div class="dim small">Play on</div>
+    <div class="checks" id="tlights"></div>
+    <div class="row"><button class="btn primary big" id="test">TEST</button><span id="summary" class="dim"></span></div>
+    <div id="teststatus" aria-live="polite"></div>
+  </div>
+</div>
+
+<div id="bar"><div class="in"><span id="dirty" class="dim">All changes saved</span><span class="row"><button class="btn" id="revert" disabled>Revert</button><button class="btn primary" id="save" disabled>Save</button></span></div></div>
+<div id="toast" role="status"></div>
+
+<script>
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const LAN_RE = /^(10\.\d{1,3}|192\.168|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}(:\d{1,5})?$/;
+const HA_RE = /^light\.[a-z0-9_]{1,80}$/;
+
+let S = null, cfg = null, saved = "", scope = "all", ha = { shown: false, all: false, data: null };
+let teams = [], team = { primary: "013369", accent: "ffb612", abbr: "", name: "" };
+let status = {}, previews = {}, testing = false;
+const tsel = { sport: "nfl", event: "score", lights: null };
+
+async function api(path, body) {
+  const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const r = await fetch(path, opt);
+  let j = {};
+  try { j = await r.json(); } catch (e) { /* not json */ }
+  if (!r.ok) { const err = new Error(j.error || r.statusText); err.data = j; throw err; }
+  return j;
+}
+let toastTimer;
+function toast(msg, bad) {
+  const t = $("#toast"); t.textContent = msg; t.className = "show" + (bad ? " err" : "");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = "", 3800);
+}
+
+/* ---------- model helpers ---------- */
+const hex2 = h => "#" + String(h || "ffffff").replace("#", "").padStart(6, "0").slice(0, 6);
+function spec(sc, ev) {                              // the effective setting for a sport (or "all")
+  const base = cfg.events[ev];
+  return sc === "all" ? base : Object.assign({}, base, (cfg.sport_events[sc] || {})[ev] || {});
+}
+function hasOverride(sc, ev) { return sc !== "all" && !!(cfg.sport_events[sc] || {})[ev]; }
+function setSpec(sc, ev, patch) {
+  if (sc === "all") { Object.assign(cfg.events[ev], patch); return; }
+  cfg.sport_events[sc] = cfg.sport_events[sc] || {};
+  cfg.sport_events[sc][ev] = Object.assign({}, spec(sc, ev), patch);
+}
+function lightName(l) { return l.label || (l.id.startsWith("light.") ? l.id.slice(6).replace(/_/g, " ") : "Light " + l.id); }
+const isDirty = () => JSON.stringify(cfg) !== saved;
+
+/* ---------- lights ---------- */
+function renderLights() {
+  const box = $("#lights");
+  if (!cfg.lights.length) { box.innerHTML = '<p class="dim">No lights yet. Press <b>Scan for LAN lights</b> to find Govee lights with LAN Control on, or add some from Home Assistant.</p>'; }
+  else box.innerHTML = cfg.lights.map((l, i) => {
+    const st = status[l.id], cls = !st ? "" : st.ok ? "ok" : "bad";
+    const now = st && st.ok && st.on !== null ? (st.on ? " · on now" : " · off now") : "";
+    const kind = l.id.startsWith("light.") ? '<span class="chip ha">Home Assistant</span>' : '<span class="chip lan">LAN' + (l.model ? " · " + esc(l.model) : "") + "</span>";
+    return `<div class="light ${l.enabled ? "" : "off"}">
+      <label class="switch" title="React to games"><input type="checkbox" data-i="${i}" data-a="en" ${l.enabled ? "checked" : ""} aria-label="Use ${esc(lightName(l))}"><span></span></label>
+      <div><input type="text" class="name" data-i="${i}" data-a="label" value="${esc(l.label)}" placeholder="${esc(lightName(l))}" maxlength="40" aria-label="Name">
+        <div class="meta"><span class="dot ${cls}" title="${!st ? "not checked" : st.ok ? "answering" : "not answering"}"></span>${kind}<span>${esc(l.id)}${now}</span></div></div>
+      <div class="acts"><button class="btn" data-i="${i}" data-a="blink" title="Blink this light white three times">Blink</button><button class="btn x" data-i="${i}" data-a="del" aria-label="Remove">✕</button></div></div>`;
+  }).join("");
+  renderTestLights();
+}
+$("#lights").addEventListener("input", e => {
+  const el = e.target; if (el.dataset.a === "label") { cfg.lights[+el.dataset.i].label = el.value; touch(); renderTestLights(); }
+});
+$("#lights").addEventListener("change", e => {
+  const el = e.target; if (el.dataset.a === "en") { cfg.lights[+el.dataset.i].enabled = el.checked; touch(); renderLights(); }
+});
+$("#lights").addEventListener("click", async e => {
+  const b = e.target.closest("button"); if (!b) return; const i = +b.dataset.i, l = cfg.lights[i];
+  if (b.dataset.a === "del") { cfg.lights.splice(i, 1); touch(); renderLights(); }
+  if (b.dataset.a === "blink") {
+    try { await api("/api/identify", { id: l.id }); toast("Blinking " + lightName(l) + "…"); } catch (err) { toast(err.message, true); }
+  }
+});
+function addLight(id, model, label) {
+  if (cfg.lights.some(l => l.id === id)) return false;
+  cfg.lights.push({ id, label: label || "", enabled: true, model: model || "" }); touch(); renderLights(); return true;
+}
+async function checkLights() {
+  if (!cfg.lights.length) return;
+  $("#refresh").disabled = true;
+  try { status = await api("/api/status", { ids: cfg.lights.map(l => l.id) }); renderLights(); } catch (e) { toast(e.message, true); }
+  $("#refresh").disabled = false;
+}
+$("#refresh").onclick = checkLights;
+$("#scan").onclick = async () => {
+  $("#scan").disabled = true; $("#scanmsg").textContent = "Scanning the network (about 9 seconds)…";
+  try {
+    await api("/api/scan", {});
+    for (let n = 0; n < 40; n++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const s = await api("/api/scan");
+      if (!s.running) {
+        const fresh = s.found.filter(f => addLight(f.id, f.model));
+        $("#scanmsg").textContent = s.found.length ? `Found ${s.found.length} (${fresh.length} new). Use Blink to find out which is which.` :
+          "Nothing answered. In the Govee Home app, open the light's settings and switch on LAN Control.";
+        break;
+      }
+    }
+    checkLights();
+  } catch (e) { $("#scanmsg").textContent = e.message; }
+  $("#scan").disabled = false;
+};
+$("#addip").onclick = () => {
+  $("#picker").innerHTML = `<div class="picker"><div class="row"><input type="text" id="ipin" placeholder="192.168.0.50  or  light.tv_backlight" style="flex:1"><button class="btn primary" id="ipgo">Add</button><button class="btn" id="ipx">Close</button></div></div>`;
+  $("#ipin").focus();
+  $("#ipx").onclick = () => $("#picker").innerHTML = "";
+  $("#ipgo").onclick = () => {
+    const v = $("#ipin").value.trim();
+    if (!LAN_RE.test(v) && !HA_RE.test(v)) { toast("That is not a local address or a light.entity id", true); return; }
+    toast(addLight(v) ? "Added" : "Already in the list"); $("#ipin").value = "";
+  };
+};
+async function showHa() {
+  const p = $("#picker");
+  p.innerHTML = '<div class="picker dim">Asking Home Assistant…</div>';
+  let d; try { d = await api("/api/ha/lights" + (ha.all ? "?all=1" : "")); } catch (e) { p.innerHTML = ""; toast(e.message, true); return; }
+  ha.data = d;
+  if (d.error) { p.innerHTML = `<div class="picker bad">${esc(d.error)} <button class="btn" id="hax">Close</button></div>`; $("#hax").onclick = () => p.innerHTML = ""; return; }
+  p.innerHTML = `<div class="picker"><div class="row"><input type="text" id="hasearch" placeholder="Search ${d.lights.length} lights" style="flex:1">
+    <label class="row small dim"><input type="checkbox" id="haall" ${ha.all ? "checked" : ""}> show every light, not just Govee</label><button class="btn" id="hax">Close</button></div><div class="list" id="halist"></div></div>`;
+  $("#hax").onclick = () => p.innerHTML = "";
+  $("#haall").onchange = e => { ha.all = e.target.checked; showHa(); };
+  const draw = () => {
+    const q = $("#hasearch").value.toLowerCase();
+    $("#halist").innerHTML = d.lights.filter(l => (l.name + l.id).toLowerCase().includes(q)).map(l => {
+      const have = cfg.lights.some(x => x.id === l.id);
+      return `<div class="pick"><div>${esc(l.name)}<div class="dim small">${esc(l.id)} · ${esc(l.state)}</div></div><button class="btn" data-id="${esc(l.id)}" data-n="${esc(l.name)}" ${have ? "disabled" : ""}>${have ? "Added" : "Add"}</button></div>`;
+    }).join("") || '<p class="dim">No matches</p>';
+  };
+  $("#hasearch").oninput = draw; draw();
+  $("#halist").onclick = e => { const b = e.target.closest("button"); if (b && !b.disabled) { addLight(b.dataset.id, "", b.dataset.n); draw(); } };
+}
+$("#addha").onclick = showHa;
+
+/* ---------- sports ---------- */
+function renderSports() {
+  $("#sports").innerHTML = S.sports.map(s => `<label class="sportswitch"><span class="switch"><input type="checkbox" data-s="${s.key}" ${cfg.sports[s.key] !== false ? "checked" : ""}><span></span></span><b>${esc(s.label)}</b></label>`).join("");
+  $("#scope").innerHTML = [{ key: "all", label: "All sports" }, ...S.sports].map(s =>
+    `<button data-s="${s.key}" class="${scope === s.key ? "on" : ""} ${s.key !== "all" && cfg.sports[s.key] === false ? "muted" : ""}">${esc(s.label)}${s.key !== "all" && cfg.sport_events[s.key] && Object.keys(cfg.sport_events[s.key]).length ? " •" : ""}</button>`).join("");
+}
+$("#sports").addEventListener("change", e => { const k = e.target.dataset.s; if (k) { cfg.sports[k] = e.target.checked; touch(); renderSports(); } });
+$("#scope").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return; scope = b.dataset.s;
+  if (scope !== "all") { tsel.sport = scope; renderTest(); }
+  renderSports(); renderEvents();
+});
+
+/* ---------- effects ---------- */
+function pvKey(sp) { return sp.colors === "team" ? `team|${team.primary}|${team.accent}` : `c|${sp.colors.primary}|${sp.colors.accent}`; }
+async function loadPreviews(keys) {
+  for (const k of keys) {
+    if (previews[k]) continue;
+    const [kind, p, a] = k.split("|");
+    previews[k] = await api("/api/previews", { primary: p, accent: a, custom: kind === "c" }).catch(() => null);
+  }
+}
+function renderEvents() {
+  $("#events").innerHTML = S.events.map(ev => {
+    const sp = spec(scope, ev.key), ov = hasOverride(scope, ev.key), custom = sp.colors !== "team";
+    const cp = custom ? sp.colors : { primary: "ffffff", accent: "ffffff" };
+    return `<div class="event ${sp.enabled ? "" : "off"}" data-ev="${ev.key}">
+      <div class="evhead"><label class="switch"><input type="checkbox" data-k="enabled" ${sp.enabled ? "checked" : ""} aria-label="${esc(ev.label)}"><span></span></label>
+        <div style="flex:1"><b>${esc(ev.label)}</b> ${scope !== "all" ? (ov ? '<span class="tag">custom for ' + scope.toUpperCase() + "</span>" : '<span class="dim small">same as all sports</span>') : ""}<div class="dim small">${esc(ev.help)}</div></div>
+        ${ov ? '<button class="btn small" data-k="reset">Use all-sports</button>' : ""}</div>
+      <div class="fxgrid" role="radiogroup" aria-label="Effect">${S.effects.map(f => `<button class="fx ${sp.effect === f.key ? "on" : ""}" role="radio" aria-checked="${sp.effect === f.key}" data-k="effect" data-v="${f.key}"><div class="sw" data-fx="${f.key}" data-pv="${esc(pvKey(sp))}"></div><b>${f.key}</b><small>${esc(f.info)}</small></button>`).join("")}</div>
+      <div class="opts">
+        <div class="row"><label class="k" for="sec-${ev.key}">Length</label><input type="range" id="sec-${ev.key}" min="2" max="30" step="1" value="${sp.seconds}" data-k="seconds"><b data-out="${ev.key}">${sp.seconds}s</b></div>
+        <div class="row"><span class="k dim small">Colors</span><div class="seg"><button data-k="colors" data-v="team" class="${custom ? "" : "on"}">Team colors</button><button data-k="colors" data-v="custom" class="${custom ? "on" : ""}">Custom</button></div>
+          ${custom ? `<input type="color" data-k="cp" value="${hex2(cp.primary)}" aria-label="Main color"><input type="color" data-k="ca" value="${hex2(cp.accent)}" aria-label="Second color">` : ""}</div>
+      </div></div>`;
+  }).join("");
+  loadPreviews(new Set(S.events.map(e => pvKey(spec(scope, e.key))))).then(() => { });
+  renderSummary();
+}
+$("#events").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return; const ev = b.closest(".event").dataset.ev, k = b.dataset.k;
+  if (k === "effect") setSpec(scope, ev, { effect: b.dataset.v });
+  else if (k === "colors") setSpec(scope, ev, { colors: b.dataset.v === "team" ? "team" : { primary: "ffffff", accent: team.accent || "ffb612" } });
+  else if (k === "reset") { delete cfg.sport_events[scope][ev]; if (!Object.keys(cfg.sport_events[scope]).length) delete cfg.sport_events[scope]; }
+  else return;
+  touch(); renderSports(); renderEvents();
+});
+$("#events").addEventListener("change", e => {
+  const el = e.target, k = el.dataset.k; if (!k) return; const ev = el.closest(".event").dataset.ev, sp = spec(scope, ev);
+  if (k === "enabled") setSpec(scope, ev, { enabled: el.checked });
+  else if (k === "cp" || k === "ca") {
+    const c = sp.colors === "team" ? { primary: "ffffff", accent: "ffffff" } : sp.colors;
+    setSpec(scope, ev, { colors: { primary: k === "cp" ? el.value.slice(1) : c.primary, accent: k === "ca" ? el.value.slice(1) : c.accent } });
+  } else return;
+  touch(); renderSports(); renderEvents();
+});
+$("#events").addEventListener("input", e => {
+  const el = e.target; if (el.dataset.k !== "seconds") return; const ev = el.closest(".event").dataset.ev;
+  setSpec(scope, ev, { seconds: +el.value }); $(`[data-out="${ev}"]`).textContent = el.value + "s"; touch(); renderSummary();
+});
+
+/* animated swatches: one loop drives every preview tile */
+function colorAt(steps, t) {
+  let c = [0, 0, 0];
+  for (const [ts, col] of steps) { if (ts <= t) c = col; else break; }
+  return c;
+}
+function tick(now) {
+  document.querySelectorAll(".sw").forEach(el => {
+    const pv = previews[el.dataset.pv]; if (!pv) return; const p = pv[el.dataset.fx]; if (!p) return;
+    const t = (now / 1000) % (p.seconds + 1), c = colorAt(p.steps, t), css = `rgb(${c[0]},${c[1]},${c[2]})`;
+    el.style.background = css; el.style.boxShadow = `0 0 14px ${css}`;
+  });
+  requestAnimationFrame(tick);
+}
+
+/* ---------- test ---------- */
+function renderTestLights() {
+  if (!cfg) return;
+  if (!tsel.lights) tsel.lights = new Set(cfg.lights.filter(l => l.enabled).map(l => l.id));
+  tsel.lights = new Set([...tsel.lights].filter(id => cfg.lights.some(l => l.id === id)));
+  $("#tlights").innerHTML = cfg.lights.length ? cfg.lights.map(l => `<label><input type="checkbox" data-id="${esc(l.id)}" ${tsel.lights.has(l.id) ? "checked" : ""}> ${esc(lightName(l))}</label>`).join("") : '<span class="dim">Add a light first</span>';
+  renderSummary();
+}
+$("#tlights").addEventListener("change", e => { const id = e.target.dataset.id; if (!id) return; e.target.checked ? tsel.lights.add(id) : tsel.lights.delete(id); renderSummary(); });
+function renderTest() {
+  $("#tsport").innerHTML = S.sports.map(s => `<option value="${s.key}" ${tsel.sport === s.key ? "selected" : ""}>${esc(s.label)}</option>`).join("");
+  $("#tevent").innerHTML = S.events.map(e => `<option value="${e.key}" ${tsel.event === e.key ? "selected" : ""}>${esc(e.label)}</option>`).join("");
+  renderTeams(); renderSummary();
+}
+function renderTeams() {
+  $("#tteam").innerHTML = teams.length ? teams.map(t => `<option value="${esc(t.abbr)}" ${t.abbr === team.abbr ? "selected" : ""}>${esc(t.name)}</option>`).join("") : '<option value="">Default colors</option>';
+}
+async function loadTeams() {
+  const d = await api("/api/teams?sport=" + tsel.sport).catch(() => ({ teams: [] }));
+  teams = d.teams;
+  if (teams.length && !teams.some(t => t.abbr === team.abbr)) team = teams[0];
+  renderTeams(); await loadPreviews([pvKey({ colors: "team" })]); renderEvents();
+}
+$("#tsport").onchange = e => { tsel.sport = e.target.value; loadTeams(); renderSummary(); };
+$("#tteam").onchange = e => { team = teams.find(t => t.abbr === e.target.value) || team; renderEvents(); };
+$("#tevent").onchange = e => { tsel.event = e.target.value; renderSummary(); };
+function renderSummary() {
+  const sp = spec(tsel.sport, tsel.event), n = tsel.lights ? tsel.lights.size : 0;
+  const ev = S.events.find(e => e.key === tsel.event).label;
+  $("#summary").textContent = sp.enabled ? `${ev}: ${sp.effect}, ${sp.seconds}s, ${sp.colors === "team" ? (team.name || "team") + " colors" : "your colors"}, on ${n} light${n === 1 ? "" : "s"}` :
+    `${ev} is switched off for ${tsel.sport.toUpperCase()}. Testing plays the effect anyway.`;
+  $("#test").disabled = testing || !n;
+}
+$("#test").onclick = async () => {
+  const sp = spec(tsel.sport, tsel.event), st = $("#teststatus");
+  testing = true; $("#test").disabled = true; st.className = ""; st.textContent = "Starting…";
+  try {
+    await api("/api/test", { spec: sp, team, lights: [...tsel.lights] });
+    for (let n = 0; n < 120; n++) {
+      await new Promise(r => setTimeout(r, 700));
+      const t = await api("/api/test");
+      st.textContent = t.message;
+      if (!t.running) { st.className = t.ok ? "ok" : "bad"; break; }
+    }
+  } catch (e) { st.className = "bad"; st.textContent = e.message; }
+  testing = false; renderSummary();
+};
+
+/* ---------- save ---------- */
+function touch() {
+  const d = isDirty();
+  $("#dirty").textContent = d ? "Unsaved changes" : "All changes saved"; $("#dirty").className = d ? "" : "dim";
+  $("#save").disabled = !d; $("#revert").disabled = !d;
+  $("#master").checked = cfg.enabled; $("#masterlabel").textContent = cfg.enabled ? "Lights react to games" : "Lights are off";
+  renderBanner();
+}
+function renderBanner() {
+  const b = [];
+  if (!S.saved && !cfg.lights.length) b.push("Welcome. Add your lights, choose what they do, test it, then press <b>Save</b>.");
+  else if (!cfg.enabled) b.push("The master switch is off, so no game will trigger the lights. Test still works.");
+  if (cfg.enabled && !cfg.lights.some(l => l.enabled)) b.push("No light is switched on, so nothing will happen.");
+  $("#banner").innerHTML = b.map(x => `<div class="banner">${x}</div>`).join("");
+}
+$("#master").onchange = e => { cfg.enabled = e.target.checked; touch(); };
+$("#save").onclick = async () => {
+  try {
+    const r = await api("/api/config", cfg); cfg = r.config; saved = JSON.stringify(cfg); S.saved = true;
+    toast("Saved. The sports plugins pick it up with the next score."); touch(); renderAll();
+  } catch (e) { toast(e.message, true); }
+};
+$("#revert").onclick = () => { if (!saved) { location.reload(); return; } cfg = JSON.parse(saved); touch(); renderAll(); };
+window.addEventListener("beforeunload", e => { if (S && S.saved && isDirty()) { e.preventDefault(); e.returnValue = ""; } });
+
+function renderAll() { renderLights(); renderSports(); renderEvents(); renderTest(); touch(); }
+(async function init() {
+  try { S = await api("/api/state"); } catch (e) { document.body.innerHTML = "<p style='padding:20px'>Could not load: " + esc(e.message) + "</p>"; return; }
+  cfg = S.config; saved = JSON.stringify(cfg);
+  if (!S.saved) { cfg.enabled = true; saved = ""; }                  // first visit: nothing on disk yet, so Save is live
+  if (!S.ha.available) { $("#addha").disabled = true; $("#addha").title = "Home Assistant is not configured in LEDMatrix"; }
+  renderAll(); requestAnimationFrame(tick);
+  checkLights(); loadTeams();
+})();
+</script>
+</body>
+</html>

@@ -27,11 +27,14 @@ import colorsys
 import json
 import logging
 import math
+import os
 import random
+import re
 import socket
 import sys
 import threading
 import time
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 RGB = Tuple[int, int, int]
@@ -175,10 +178,44 @@ def fx_burst(p: RGB, a: RGB, dur: float) -> Steps:
     return _tail(st, t, p, dur)
 
 
+def fx_identify(p: RGB, a: RGB, dur: float) -> Steps:
+    """Three slow white blinks, to tell which light is which."""
+    st: Steps = []
+    for k in range(3):
+        st += [(k * 0.9, WHITE), (k * 0.9 + 0.5, BLACK)]
+    st.append((2.7, WHITE))
+    return st
+
+
 EFFECTS: Dict[str, Callable[[RGB, RGB, float], Steps]] = {
     "flash": fx_flash, "pulse": fx_pulse, "chase": fx_chase, "strobe": fx_strobe,
-    "fireworks": fx_fireworks, "glow": fx_glow, "burst": fx_burst,
+    "fireworks": fx_fireworks, "glow": fx_glow, "burst": fx_burst, "identify": fx_identify,
 }
+
+# What the portal offers, in order, with a plain description (identify is internal)
+EFFECT_INFO: Dict[str, str] = {
+    "burst": "A white pop, then the two team colors trade places and settle",
+    "fireworks": "Random bursts of both colors and white, each fading out",
+    "flash": "Three white-to-team-color flashes",
+    "pulse": "Slow breathing in the team colors",
+    "chase": "The two colors alternate; with several lights it travels along them",
+    "strobe": "Fast strobing for two seconds, then the team color",
+    "glow": "Fades up to the team color and holds",
+}
+PICKABLE = list(EFFECT_INFO)
+EVENT_NAMES = ("score", "big_score", "against")
+KNOWN_SPORTS = ("nfl", "nba", "nhl")
+
+
+def preview(effect: str, primary: Any, accent: Any, seconds: float, custom: bool = False) -> Dict[str, Any]:
+    """One light's colour over time, for the portal's animated swatch."""
+    if custom:
+        p, a = parse_color(primary), parse_color(accent)
+    else:
+        p, a = team_colors(primary, accent)
+    secs = max(2.0, min(30.0, float(seconds)))
+    steps = EFFECTS.get(effect, fx_burst)(p, a, secs)
+    return {"seconds": secs, "steps": [[round(t, 3), list(c)] for t, c in steps], "primary": list(p), "accent": list(a)}
 
 
 def timeline(effect: str, p: RGB, a: RGB, dur: float, lights: int, stagger: float) -> List[Tuple[float, int, RGB, bool]]:
@@ -214,6 +251,7 @@ class LanTransport:
         self.tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.status: Dict[str, Tuple[float, Dict[str, Any]]] = {}
         self.found: Dict[str, str] = {}
+        self.ids: Dict[str, str] = {}
         self._rx: Optional[socket.socket] = None
         self._lock = threading.Lock()
         try:
@@ -245,6 +283,7 @@ class LanTransport:
             body = msg.get("data") or {}
             if msg.get("cmd") == "scan" and body.get("ip"):
                 self.found[body["ip"]] = body.get("sku", "?")
+                self.ids[body["ip"]] = body.get("device", "")
             elif msg.get("cmd") == "devStatus":
                 self.status[addr[0]] = (time.time(), body)
 
@@ -262,7 +301,7 @@ class LanTransport:
             time.sleep(0.05)
         return None
 
-    def scan(self, timeout: float = 4.0, iface: Optional[str] = None) -> Dict[str, str]:
+    def scan(self, timeout: float = 8.0, iface: Optional[str] = None) -> Dict[str, str]:
         self.found = {}
         msg = json.dumps({"msg": {"cmd": "scan", "data": {"account_topic": "reserve"}}}).encode()
         if iface:
@@ -374,6 +413,216 @@ class HaLight:
 
 
 # ----------------------------------------------------------------------
+# central config: one file for every sports plugin, written by the govee-lights portal
+# ----------------------------------------------------------------------
+
+_LAN_RE = re.compile(r"^(10\.\d{1,3}|192\.168|127\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}(:\d{1,5})?$")
+_HA_RE = re.compile(r"^light\.[a-z0-9_]{1,80}$")
+_HEX_RE = re.compile(r"^#?[0-9a-fA-F]{6}$")
+_SPORT_RE = re.compile(r"^[a-z0-9_-]{2,20}$")
+DEFAULT_SPEC: Dict[str, Dict[str, Any]] = {
+    "score": {"enabled": True, "effect": "burst", "seconds": 6.0, "colors": "team"},
+    "big_score": {"enabled": True, "effect": "fireworks", "seconds": 10.0, "colors": "team"},
+    "against": {"enabled": False, "effect": "pulse", "seconds": 4.0, "colors": "team"},
+}
+
+
+def default_central_path() -> Optional[Path]:
+    """<LEDMatrix>/config/govee_fx.json, found from the plugin's own folder (plugin-repos/<plugin>/)."""
+    env = os.environ.get("LEDMATRIX_GOVEE_CONFIG")
+    if env:
+        return Path(env)
+    try:
+        return Path(__file__).resolve().parents[2] / "config" / "govee_fx.json"
+    except IndexError:
+        return None
+
+
+def valid_light_id(value: Any) -> bool:
+    v = str(value or "")
+    return bool(_LAN_RE.match(v) or _HA_RE.match(v))
+
+
+def clean_event(raw: Any, base: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(base)
+    if not isinstance(raw, dict):
+        return out
+    if "enabled" in raw:
+        out["enabled"] = bool(raw["enabled"])
+    if raw.get("effect") in PICKABLE:
+        out["effect"] = raw["effect"]
+    try:
+        if "seconds" in raw:
+            out["seconds"] = max(2.0, min(30.0, float(raw["seconds"])))
+    except (TypeError, ValueError):
+        pass
+    col = raw.get("colors")
+    if col == "team":
+        out["colors"] = "team"
+    elif isinstance(col, dict) and _HEX_RE.match(str(col.get("primary", ""))):
+        acc = str(col.get("accent", "ffffff"))
+        out["colors"] = {"primary": str(col["primary"]).lstrip("#").lower(),
+                         "accent": (acc if _HEX_RE.match(acc) else "ffffff").lstrip("#").lower()}
+    return out
+
+
+def clean_config(raw: Any) -> Dict[str, Any]:
+    """Whatever the portal (or a hand edit) wrote, reduced to a safe, complete config."""
+    raw = raw if isinstance(raw, dict) else {}
+    lights: List[Dict[str, Any]] = []
+    seen = set()
+    for l in raw.get("lights") or []:
+        if not isinstance(l, dict) or not valid_light_id(l.get("id")) or l["id"] in seen:
+            continue
+        seen.add(l["id"])
+        lights.append({"id": l["id"], "label": str(l.get("label") or "")[:40], "enabled": bool(l.get("enabled", True)),
+                       "model": str(l.get("model") or "")[:20]})
+        if len(lights) >= 40:
+            break
+    sports = {k: True for k in KNOWN_SPORTS}
+    for k, v in (raw.get("sports") or {}).items():
+        if _SPORT_RE.match(str(k)):
+            sports[str(k)] = bool(v)
+    events = {k: clean_event((raw.get("events") or {}).get(k), v) for k, v in DEFAULT_SPEC.items()}
+    sport_events: Dict[str, Dict[str, Any]] = {}
+    for sp, evs in (raw.get("sport_events") or {}).items():
+        if not _SPORT_RE.match(str(sp)) or not isinstance(evs, dict):
+            continue
+        for ev, spec in evs.items():
+            if ev in DEFAULT_SPEC and isinstance(spec, dict):
+                sport_events.setdefault(str(sp), {})[ev] = clean_event(spec, events[ev])
+
+    def num(key: str, default: float, lo: float, hi: float) -> float:
+        try:
+            return max(lo, min(hi, float(raw.get(key, default))))
+        except (TypeError, ValueError):
+            return default
+
+    fb = str(raw.get("restore_fallback", "off"))
+    return {"enabled": bool(raw.get("enabled", False)), "ha_source": str(raw.get("ha_source") or "")[:40],
+            "lights": lights, "sports": sports, "events": events, "sport_events": sport_events,
+            "cooldown_seconds": num("cooldown_seconds", MIN_GAP, 0, 60), "stagger_seconds": num("stagger_seconds", 0.15, 0, 2),
+            "restore_fallback": fb if fb in ("off", "warm", "leave") else "off"}
+
+
+def ha_credentials(lm_config: Optional[Path], source: str = "") -> Tuple[str, str]:
+    """Home Assistant address and token, read from LEDMatrix's own config.json so the portal never stores a copy."""
+    try:
+        blocks = json.loads(Path(lm_config).read_text(encoding="utf-8")) if lm_config else {}
+    except (OSError, ValueError):
+        return "", ""
+    order = ([source] if source else []) + ["house-hud", "ha-notifications", "media-marquee", "sky-weather"]
+    order += [k for k in blocks if k not in order]
+    for k in order:
+        b = blocks.get(k)
+        if isinstance(b, dict) and b.get("ha_url") and b.get("ha_token"):
+            return str(b["ha_url"]), str(b["ha_token"])
+    return "", ""
+
+
+def central_to_cfg(raw: Any, sport: Optional[str], lm_config: Optional[Path] = None) -> Dict[str, Any]:
+    """The central file as the plain config GoveeFX applies, for one sport."""
+    c = clean_config(raw)
+    events: Dict[str, Any] = {}
+    colors: Dict[str, Any] = {}
+    for ev in EVENT_NAMES:
+        spec = dict(c["events"][ev])
+        spec.update(c["sport_events"].get(sport or "", {}).get(ev, {}))
+        events[ev] = {"effect": spec["effect"] if spec["enabled"] else "off", "seconds": spec["seconds"]}
+        if isinstance(spec["colors"], dict):
+            colors[ev] = spec["colors"]
+    url, token = ha_credentials(lm_config, c["ha_source"])
+    return {"enabled": c["enabled"] and (sport is None or c["sports"].get(sport, True)),
+            "devices": [l["id"] for l in c["lights"] if l["enabled"]], "events": events, "colors": colors,
+            "ha_url": url, "ha_token": token, "cooldown_seconds": c["cooldown_seconds"],
+            "stagger_seconds": c["stagger_seconds"], "restore_fallback": c["restore_fallback"]}
+
+
+def save_central(path: Path, raw: Any) -> Dict[str, Any]:
+    """Validate and write atomically, keeping the previous file as .bak."""
+    clean = clean_config(raw)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(clean, indent=2) + "\n", encoding="utf-8")
+    if path.exists():
+        try:
+            path.replace(path.with_suffix(".json.bak"))
+        except OSError:
+            pass
+    tmp.replace(path)
+    return clean
+
+
+# ----------------------------------------------------------------------
+# discovery and status, for the portal
+# ----------------------------------------------------------------------
+
+def discover_lan(timeout: float = 8.0, iface: Optional[str] = None) -> List[Dict[str, str]]:
+    found = LanTransport.get().scan(timeout, iface)
+    return [{"id": ip, "model": sku} for ip, sku in sorted(found.items(), key=lambda kv: tuple(int(x) for x in kv[0].split(".")))]
+
+
+_SEGMENT_RE = re.compile(r"(_segments?|_segment_\d+)$")
+
+
+def list_ha_lights(url: str, token: str, govee_only: bool = True, session: Any = None) -> List[Dict[str, str]]:
+    """Light entities (never the per-segment ones). With govee_only, just those from Home Assistant's Govee integration."""
+    import requests
+    s = session or requests
+    hd = {"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+    base = url.rstrip("/")
+    keep = None
+    if govee_only:
+        try:
+            r = s.post(base + "/api/template", headers=hd, timeout=10,
+                       json={"template": "{{ integration_entities('govee') | select('match','light[.]') | list | tojson }}"})
+            if r.status_code == 200:
+                keep = set(json.loads(r.text))
+        except (OSError, ValueError, requests.RequestException):
+            keep = None
+    r = s.get(base + "/api/states", headers=hd, timeout=15)
+    out = []
+    for st in r.json():
+        eid = st.get("entity_id", "")
+        if not eid.startswith("light.") or _SEGMENT_RE.search(eid):
+            continue
+        if keep is not None and eid not in keep:
+            continue
+        out.append({"id": eid, "name": (st.get("attributes") or {}).get("friendly_name") or eid, "state": st.get("state", "")})
+    return sorted(out, key=lambda x: x["name"].lower())
+
+
+def light_status(ids: List[str], url: str = "", token: str = "", session: Any = None) -> Dict[str, Dict[str, Any]]:
+    """{id: {"ok": reachable, "on": bool|None}}, asked in parallel so one dead light does not stall the rest."""
+    result: Dict[str, Dict[str, Any]] = {}
+
+    def ask(i: str) -> None:
+        try:
+            if i.startswith("light."):
+                snap = HaLight(i, url, token, session).snapshot() if url and token else None
+                st = (snap or {}).get("state")
+                result[i] = {"ok": st not in (None, "unavailable", "unknown"), "on": (st == "on") if st in ("on", "off") else None}
+            else:
+                snap = LanLight(i).snapshot()
+                result[i] = {"ok": snap is not None, "on": bool(snap.get("onOff")) if snap else None}
+        except Exception:  # noqa: BLE001
+            result[i] = {"ok": False, "on": None}
+
+    threads = [threading.Thread(target=ask, args=(i,), daemon=True) for i in ids]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=8.0)
+    for i in ids:
+        result.setdefault(i, {"ok": False, "on": None})
+    return result
+
+
+_PLAY_LOCK = threading.Lock()        # one effect at a time across every plugin in this process
+
+
+# ----------------------------------------------------------------------
 # engine
 # ----------------------------------------------------------------------
 
@@ -383,7 +632,9 @@ class GoveeFX:
     time_scale = 1.0           # tests set this above 1 to run quickly
 
     def __init__(self, cfg: Optional[Dict[str, Any]] = None, logger: Optional[logging.Logger] = None,
-                 session: Any = None) -> None:
+                 session: Any = None, sport: Optional[str] = None, central: Any = None) -> None:
+        """cfg is the plugin's own `govee` block. If the portal's central file exists it wins, and is re-read
+        whenever it changes. central=False ignores any central file; a path uses that file."""
         self.log = logger or logging.getLogger("govee_fx")
         self._session = session
         self._cv = threading.Condition()
@@ -397,11 +648,46 @@ class GoveeFX:
         self.enabled = False
         self.history: List[str] = []
         self._thread: Optional[threading.Thread] = None
-        self.configure(cfg)
+        self.idle = threading.Event()
+        self.idle.set()
+        self.sport = sport
+        self._plugin_cfg: Dict[str, Any] = cfg if isinstance(cfg, dict) else {}
+        self._central: Optional[Path] = None if central is False else (Path(central) if central else default_central_path())
+        self._central_mtime: Optional[float] = None
+        self._sync_central(force=True)
 
     # -- config ---------------------------------------------------------
 
     def configure(self, cfg: Optional[Dict[str, Any]]) -> None:
+        """The plugin's own block changed."""
+        self._plugin_cfg = cfg if isinstance(cfg, dict) else {}
+        self._sync_central(force=True)
+
+    def _sync_central(self, force: bool = False) -> None:
+        """Use the portal's file when there is one, picking up edits as they are saved."""
+        try:
+            mtime = self._central.stat().st_mtime if self._central else None
+        except OSError:
+            mtime = None
+        if mtime is None:
+            if force or self._central_mtime is not None:
+                self._central_mtime = None
+                self._apply(self._plugin_cfg)
+            return
+        if mtime == self._central_mtime and not force:
+            return
+        try:
+            raw = json.loads(self._central.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            self.log.warning("govee: could not read %s: %s", self._central, exc)
+            if self._central_mtime is None:
+                self._apply(self._plugin_cfg)
+            self._central_mtime = mtime
+            return
+        self._central_mtime = mtime
+        self._apply(central_to_cfg(raw, self.sport, self._central.parent / "config.json"))
+
+    def _apply(self, cfg: Optional[Dict[str, Any]]) -> None:
         cfg = cfg if isinstance(cfg, dict) else {}
         self.enabled = bool(cfg.get("enabled", False))
         self.fallback = str(cfg.get("restore_fallback", "off"))
@@ -439,6 +725,7 @@ class GoveeFX:
     def trigger(self, event: str, primary: Any = "ffffff", accent: Any = "ffffff") -> bool:
         """Queue an effect for an event ('score', 'big_score', 'against', ...). Returns whether one was queued."""
         try:
+            self._sync_central()
             spec = self.events.get(event)
             if not self.enabled or not self.lights or not spec or spec.get("effect", "off") == "off":
                 return False
@@ -446,10 +733,14 @@ class GoveeFX:
             if now - self._last_end < self.cooldown and event != "big_score":
                 return False
             over = self.colors.get(event) if isinstance(self.colors.get(event), dict) else {}
-            p, a = team_colors(over.get("primary", primary), over.get("accent", accent))
+            if over.get("primary"):                  # colours the user picked are used as picked
+                p, a = parse_color(over["primary"]), parse_color(over.get("accent", "ffffff"))
+            else:
+                p, a = team_colors(primary, accent)
             with self._cv:
                 self._job = (str(spec.get("effect", "burst")), p, a, float(spec.get("seconds", 6)))
                 self._gen += 1
+                self.idle.clear()
                 self._cv.notify()
             self.history.append(event)
             return True
@@ -464,6 +755,11 @@ class GoveeFX:
             self._cv.notify()
         if self._thread is not None:
             self._thread.join(timeout=3.0)
+        self.idle.set()
+
+    def wait(self, timeout: float = 30.0) -> bool:
+        """Block until the current effect has finished and the lights are restored."""
+        return self.idle.wait(timeout)
 
     # -- worker ---------------------------------------------------------
 
@@ -492,29 +788,33 @@ class GoveeFX:
                     return
                 job, gen = self._job, self._gen
                 self._job = None
-            self._play(job, gen)
+            with _PLAY_LOCK:
+                self._play(job, gen)
 
     def _play(self, job: Tuple[str, RGB, RGB, float], gen: int) -> None:
         effect, p, a, dur = job
+        lights = self.lights                # a config reload mid-effect must not change who we restore
         if self._snaps is None:
-            self._snaps = [self._safe(l.snapshot) for l in self.lights]
-        for l in self.lights:
+            self._snaps = [self._safe(l.snapshot) for l in lights]
+        for l in lights:
             self._safe(l.prepare)
-        steps = timeline(effect, p, a, dur, len(self.lights), self.stagger)
+        steps = timeline(effect, p, a, dur, len(lights), self.stagger)
         start = time.monotonic()
         for t, i, rgb, last in steps:
             if not self._sleep_until(start + t / self.time_scale, gen):
                 return                      # a newer effect (or close) took over; it will restore
             if not last and time.monotonic() - (start + t / self.time_scale) > 0.5:
                 continue                    # running behind (slow Home Assistant): skip, catch up
-            self._safe(self.lights[i].show, rgb)
+            self._safe(lights[i].show, rgb)
         if self._gen != gen:
             return
         time.sleep(0.25 / self.time_scale)
         snaps, self._snaps = self._snaps, None
-        for l, s in zip(self.lights, snaps or []):
+        for l, s in zip(lights, snaps or []):
             self._safe(l.restore, s, self.fallback)
         self._last_end = time.monotonic()
+        if self._gen == gen:
+            self.idle.set()
 
 
 # ----------------------------------------------------------------------
@@ -536,7 +836,7 @@ def _main(argv: List[str]) -> int:
     ts.add_argument("--ha-token")
     args = ap.parse_args(argv)
     if args.cmd == "scan":
-        found = LanTransport.get().scan(4.0, args.iface)
+        found = LanTransport.get().scan(8.0, args.iface)
         if not found:
             print("No lights answered. Turn on LAN Control for the light in the Govee Home app "
                   "(light settings > gear icon), and run this from a computer on the same network.")
