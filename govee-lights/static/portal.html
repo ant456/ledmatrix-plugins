@@ -68,7 +68,7 @@ input[type=range] { accent-color: var(--coin); flex: 1; min-width: 120px; }
 .event.off .fxgrid, .event.off .opts { opacity: .4; pointer-events: none; }
 .evhead { display: flex; gap: 10px; align-items: center; }
 .evhead b { font-size: 15px; }
-.fxgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 8px; margin: 12px 0; }
+.fxgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin: 12px 0; }
 .fx { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 6px; }
 .fx:hover { border-color: var(--dim); }
 .fx.on { border-color: var(--coin); box-shadow: 0 0 0 1px var(--coin); }
@@ -98,7 +98,11 @@ input[type=range] { accent-color: var(--coin); flex: 1; min-width: 120px; }
 #bar .in { max-width: 980px; margin: 0 auto; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 #toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--line); padding: 9px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 6; max-width: 90vw; }
 #toast.show { opacity: 1; } #toast.err { border-color: var(--bad); color: var(--bad); }
-@media (max-width: 560px) { .light { grid-template-columns: auto 1fr; } .light .acts { grid-column: 1 / -1; } }
+.arow { display: grid; grid-template-columns: 78px 44px 1fr auto; gap: 8px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.arow:last-child { border-bottom: 0; }
+.arow .st { font-size: 12px; color: var(--dim); text-align: right; }
+.arow .st.playing { color: var(--cyan); } .arow .st.done { color: var(--ok); } .arow .st.skipped { color: var(--coin); } .arow .st.interrupted { color: var(--dim); }
+@media (max-width: 560px) { .arow { grid-template-columns: 70px 1fr; } .arow .st { grid-column: 2; text-align: left; } .light { grid-template-columns: auto 1fr; } .light .acts { grid-column: 1 / -1; } }
 @media (prefers-reduced-motion: reduce) { .switch span, .switch span::after { transition: none; } }
 </style>
 </head>
@@ -147,6 +151,12 @@ input[type=range] { accent-color: var(--coin); flex: 1; min-width: 120px; }
     <div class="checks" id="tlights"></div>
     <div class="row"><button class="btn primary big" id="test">TEST</button><span id="summary" class="dim"></span></div>
     <div id="teststatus" aria-live="polite"></div>
+  </div>
+
+  <div class="card">
+    <h2>5 · Recent activity</h2>
+    <p class="dim small" style="margin-top:-4px">Every time a sports plugin tries to flash the lights, it is listed here, including the times it decided not to and why. Shown since the last restart.</p>
+    <div id="activity"></div>
   </div>
 </div>
 
@@ -206,7 +216,8 @@ function renderLights() {
       <label class="switch" title="React to games"><input type="checkbox" data-i="${i}" data-a="en" ${l.enabled ? "checked" : ""} aria-label="Use ${esc(lightName(l))}"><span></span></label>
       <div><input type="text" class="name" data-i="${i}" data-a="label" value="${esc(l.label)}" placeholder="${esc(lightName(l))}" maxlength="40" aria-label="Name">
         <div class="meta"><span class="dot ${cls}" title="${!st ? "not checked" : st.ok ? "answering" : "not answering"}"></span>${kind}<span>${esc(l.id)}${now}</span>
-          <label class="segctl" title="RGBIC lights have sections that can each show their own color. 1 means the whole light acts as one.">Sections <input type="number" min="1" max="16" value="${l.segments || 1}" data-i="${i}" data-a="segs" aria-label="Number of sections"></label></div></div>
+          <label class="segctl" title="RGBIC lights have sections that can each show their own color. 1 means the whole light acts as one.">Sections <input type="number" min="1" max="16" value="${l.segments || 1}" data-i="${i}" data-a="segs" aria-label="Number of sections"></label>
+          ${(l.segments || 1) > 1 ? `<label class="segctl" title="Section 1 is where the rocket starts. Tick this if section 1 is at the top of the light."><input type="checkbox" data-i="${i}" data-a="flip" ${l.flip ? "checked" : ""}> Reverse</label>` : ""}</div></div>
       <div class="acts"><button class="btn" data-i="${i}" data-a="blink" title="Blink this light white three times">Blink</button><button class="btn" data-i="${i}" data-a="sweep" title="Light each section in turn so you can count them">Show sections</button><button class="btn x" data-i="${i}" data-a="del" aria-label="Remove">✕</button></div></div>`;
   }).join("");
   renderTestLights();
@@ -217,6 +228,7 @@ $("#lights").addEventListener("input", e => {
 $("#lights").addEventListener("change", e => {
   const el = e.target;
   if (el.dataset.a === "en") { cfg.lights[+el.dataset.i].enabled = el.checked; touch(); renderLights(); renderEvents(); }
+  if (el.dataset.a === "flip") { cfg.lights[+el.dataset.i].flip = el.checked; touch(); }
   if (el.dataset.a === "segs") { cfg.lights[+el.dataset.i].segments = Math.max(1, Math.min(16, parseInt(el.value) || 1)); touch(); renderLights(); renderEvents(); }
 });
 $("#lights").addEventListener("click", async e => {
@@ -416,8 +428,8 @@ $("#test").onclick = async () => {
   const sp = spec(tsel.sport, tsel.event), st = $("#teststatus");
   testing = true; $("#test").disabled = true; st.className = ""; st.textContent = "Starting…";
   try {
-    const segs = {}; cfg.lights.forEach(l => { if (tsel.lights.has(l.id)) segs[l.id] = l.segments || 1; });
-    await api("/api/test", { spec: sp, team, lights: [...tsel.lights], segments: segs });
+    const segs = {}, flips = {}; cfg.lights.forEach(l => { if (tsel.lights.has(l.id)) { segs[l.id] = l.segments || 1; if (l.flip) flips[l.id] = true; } });
+    await api("/api/test", { spec: sp, team, lights: [...tsel.lights], segments: segs, flips });
     for (let n = 0; n < 120; n++) {
       await new Promise(r => setTimeout(r, 700));
       const t = await api("/api/test");
@@ -453,6 +465,18 @@ $("#save").onclick = async () => {
 $("#revert").onclick = () => { if (!saved) { location.reload(); return; } cfg = JSON.parse(saved); touch(); renderAll(); };
 window.addEventListener("beforeunload", e => { if (S && S.saved && isDirty()) { e.preventDefault(); e.returnValue = ""; } });
 
+/* ---------- activity ---------- */
+async function loadActivity() {
+  let a; try { a = await api("/api/activity"); } catch (e) { return; }
+  $("#activity").innerHTML = a.length ? a.map(r => {
+    const t = new Date(r.time * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+    const what = r.label ? esc(r.label) + ' <span class="dim small">(' + esc(r.event.replace("_", " ")) + ")</span>" : esc(r.event.replace("_", " "));
+    return `<div class="arow"><span class="dim small">${t}</span><b>${esc(r.sport) || "·"}</b><span>${what}${r.effect ? ' <span class="chip">' + esc(r.effect) + "</span>" : ""}</span>` +
+      `<span class="st ${esc(r.status)}">${esc(r.status)}${r.detail ? " · " + esc(r.detail) : ""}</span></div>`;
+  }).join("") : '<p class="dim">Nothing yet. When one of your teams scores, it shows up here.</p>';
+}
+setInterval(() => { if (!document.hidden) loadActivity(); }, 4000);
+
 function renderAll() { renderLights(); renderSports(); renderEvents(); renderTest(); touch(); }
 (async function init() {
   try { S = await api("/api/state"); } catch (e) { document.body.innerHTML = "<p style='padding:20px'>Could not load: " + esc(e.message) + "</p>"; return; }
@@ -460,7 +484,7 @@ function renderAll() { renderLights(); renderSports(); renderEvents(); renderTes
   if (!S.saved) { cfg.enabled = true; saved = ""; }                  // first visit: nothing on disk yet, so Save is live
   if (!S.ha.available) { $("#addha").disabled = true; $("#addha").title = "Home Assistant is not configured in LEDMatrix"; }
   renderAll(); requestAnimationFrame(tick);
-  checkLights(); loadTeams();
+  checkLights(); loadTeams(); loadActivity();
 })();
 </script>
 </body>

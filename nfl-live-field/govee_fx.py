@@ -35,6 +35,7 @@ import socket
 import sys
 import threading
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -179,6 +180,24 @@ def fx_burst(p: RGB, a: RGB, dur: float) -> Steps:
     return _tail(st, t, p, dur)
 
 
+def fx_rocket(p: RGB, a: RGB, dur: float) -> Steps:
+    """A light with no sections can't show a climb, so it swells brighter as the rocket rises, pops, and sparkles out."""
+    rng = random.Random(11)
+    st: Steps = []
+    t, k = 0.0, 0
+    while t < dur - 2.4:
+        c = p if k % 2 == 0 else a
+        st += _ramp(scale(c, 0.1), mix(c, WHITE, 0.5), t, t + 0.9)
+        t += 0.9
+        st.append((t, WHITE))
+        for j in range(4):
+            st.append((t + 0.12 + j * 0.13, scale(rng.choice([c, p, a, WHITE]), 1.0 - 0.2 * j)))
+        st += _ramp(c, scale(c, 0.04), t + 0.7, t + 1.1)
+        t += 1.3
+        k += 1
+    return _tail(st, t, p, dur)
+
+
 def fx_identify(p: RGB, a: RGB, dur: float) -> Steps:
     """Three slow white blinks, to tell which light is which."""
     st: Steps = []
@@ -190,12 +209,13 @@ def fx_identify(p: RGB, a: RGB, dur: float) -> Steps:
 
 EFFECTS: Dict[str, Callable[[RGB, RGB, float], Steps]] = {
     "flash": fx_flash, "pulse": fx_pulse, "chase": fx_chase, "strobe": fx_strobe,
-    "fireworks": fx_fireworks, "glow": fx_glow, "burst": fx_burst, "identify": fx_identify,
+    "fireworks": fx_fireworks, "glow": fx_glow, "burst": fx_burst, "rocket": fx_rocket, "identify": fx_identify,
 }
 
 # What the portal offers, in order, with a plain description (identify is internal)
 EFFECT_INFO: Dict[str, str] = {
     "burst": "A white pop, then the two team colors trade places and settle",
+    "rocket": "A rocket shoots up the light from the bottom, bursts at the top and showers down like fireworks",
     "fireworks": "Random bursts of both colors and white, each fading out",
     "flash": "Three white-to-team-color flashes",
     "pulse": "Slow breathing in the team colors",
@@ -331,8 +351,56 @@ def seg_glow(p: RGB, a: RGB, dur: float, n: int) -> SegFrames:
     return _seg_tail(fr, 1.2, [p] * n, dur)
 
 
+def seg_rocket(p: RGB, a: RGB, dur: float, n: int) -> SegFrames:
+    """Climbs from section 1 (the bottom) to the last, accelerating; bursts at the top; sparkles fall back down."""
+    rng = random.Random(11)
+    fr: SegFrames = []
+    t, k = 0.0, 0
+    climb = min(1.3, max(0.7, 0.08 * n))
+    while t < dur - 2.6:
+        c = p if k % 2 == 0 else a
+        steps = max(n, int(climb * HZ))
+        for s in range(steps):
+            u = (s + 1) / steps
+            head = (u ** 1.5) * (n - 1)                                  # speeds up as it climbs
+            cols = []
+            for i in range(n):
+                d = head - i
+                if d < 0:
+                    cols.append(BLACK)
+                elif d < 0.8:
+                    cols.append(mix(c, WHITE, 0.7))                      # the hot head
+                elif d < 2.0:
+                    cols.append(scale(mix(c, WHITE, 0.2), 0.6))
+                elif d < 3.2:
+                    cols.append(scale(c, 0.22))
+                else:
+                    cols.append(BLACK)
+            fr.append((t + climb * u, cols))
+        t += climb
+        for f in range(5):                                               # the burst spreads down from the top
+            r = (f + 1) / 5.0 * n * 0.8
+            fr.append((t + f * 0.07, [WHITE if (n - 1 - i) <= r * 0.4 else mix(c, WHITE, 0.35) if (n - 1 - i) <= r else BLACK
+                                      for i in range(n)]))
+        t += 0.35
+        level = [0] * n
+        colour = [c] * n
+        for f in range(10):                                              # sparkles drift down and die out
+            if rng.random() < 0.7 * (1.0 - f / 10.0):
+                for _ in range(rng.choice((1, 2, 2, 3))):
+                    i = max(0, min(n - 1, n - 1 - int(abs(rng.gauss(0, n * 0.35)))))
+                    level[i], colour[i] = 1, rng.choice([c, a, WHITE, p])
+            fr.append((t, [scale(colour[i], _LEVELS[level[i] - 1]) if level[i] else BLACK for i in range(n)]))
+            level = [(l + 1 if 0 < l < len(_LEVELS) else 0) for l in level]
+            t += 1.0 / HZ
+        fr.append((t, [BLACK] * n))
+        t += 0.25
+        k += 1
+    return _seg_tail(fr, t, [p] * n, dur)
+
+
 SEG_EFFECTS: Dict[str, Callable[[RGB, RGB, float, int], SegFrames]] = {
-    "burst": seg_burst, "chase": seg_chase, "fireworks": seg_fireworks, "pulse": seg_pulse,
+    "rocket": seg_rocket, "burst": seg_burst, "chase": seg_chase, "fireworks": seg_fireworks, "pulse": seg_pulse,
     "flash": seg_flash, "strobe": seg_strobe, "glow": seg_glow,
 }
 
@@ -363,6 +431,32 @@ def timeline(effect: str, p: RGB, a: RGB, dur: float, lights: int, stagger: floa
 
 
 # ----------------------------------------------------------------------
+# state shared by every copy of this module in the process. The core loads each plugin's modules in an
+# isolated namespace, so the NFL, NBA, NHL and portal plugins each hold their own copy of this file; the
+# listening socket, the one-effect-at-a-time lock and the activity log must still be single.
+# ----------------------------------------------------------------------
+
+def _shared() -> Dict[str, Any]:
+    reg = getattr(threading, "_govee_fx_shared", None)
+    if reg is None:
+        reg = {"guard": threading.Lock(), "play": threading.Lock(), "net": None, "log": deque(maxlen=60)}
+        threading._govee_fx_shared = reg          # type: ignore[attr-defined]
+    return reg
+
+
+def record(sport: Optional[str], event: str, label: str, effect: str, status: str, detail: str = "") -> Dict[str, Any]:
+    """Add a line to the activity log shown in the portal; returns it so its status can be updated later."""
+    entry = {"time": time.time(), "sport": (sport or "").upper(), "event": event, "label": label,
+             "effect": effect, "status": status, "detail": detail}
+    _shared()["log"].appendleft(entry)
+    return entry
+
+
+def activity(limit: int = 30) -> List[Dict[str, Any]]:
+    return [dict(e) for e in list(_shared()["log"])[:limit]]
+
+
+# ----------------------------------------------------------------------
 # LAN transport (one per process: every plugin shares the listening port)
 # ----------------------------------------------------------------------
 
@@ -372,10 +466,11 @@ class LanTransport:
 
     @classmethod
     def get(cls) -> "LanTransport":
-        with cls._guard:
-            if cls._inst is None:
-                cls._inst = cls()
-            return cls._inst
+        reg = _shared()
+        with reg["guard"]:
+            if reg["net"] is None:
+                reg["net"] = cls()
+            return reg["net"]
 
     def __init__(self) -> None:
         self.tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -658,7 +753,7 @@ def clean_config(raw: Any) -> Dict[str, Any]:
         except (TypeError, ValueError):
             nseg = 1
         lights.append({"id": l["id"], "label": str(l.get("label") or "")[:40], "enabled": bool(l.get("enabled", True)),
-                       "model": str(l.get("model") or "")[:20], "segments": nseg})
+                       "model": str(l.get("model") or "")[:20], "segments": nseg, "flip": bool(l.get("flip", False))})
         if len(lights) >= 40:
             break
     sports = {k: True for k in KNOWN_SPORTS}
@@ -717,6 +812,7 @@ def central_to_cfg(raw: Any, sport: Optional[str], lm_config: Optional[Path] = N
     return {"enabled": c["enabled"] and (sport is None or c["sports"].get(sport, True)),
             "devices": [l["id"] for l in c["lights"] if l["enabled"]], "events": events, "colors": colors,
             "segments": {l["id"]: l["segments"] for l in c["lights"]},
+            "flips": {l["id"]: True for l in c["lights"] if l["flip"]},
             "ha_url": url, "ha_token": token, "cooldown_seconds": c["cooldown_seconds"],
             "stagger_seconds": c["stagger_seconds"], "restore_fallback": c["restore_fallback"]}
 
@@ -809,7 +905,7 @@ def light_status(ids: List[str], url: str = "", token: str = "", session: Any = 
     return result
 
 
-_PLAY_LOCK = threading.Lock()        # one effect at a time across every plugin in this process
+_PLAY_LOCK = _shared()["play"]          # one effect at a time across every plugin in this process
 
 
 # ----------------------------------------------------------------------
@@ -828,7 +924,7 @@ class GoveeFX:
         self.log = logger or logging.getLogger("govee_fx")
         self._session = session
         self._cv = threading.Condition()
-        self._job: Optional[Tuple[str, RGB, RGB, float]] = None
+        self._job: Optional[Tuple[str, RGB, RGB, float, Dict[str, Any]]] = None
         self._gen = 0
         self._stop = False
         self._last_end = 0.0
@@ -895,6 +991,7 @@ class GoveeFX:
         if not self.enabled:
             return
         seg_map = cfg.get("segments") if isinstance(cfg.get("segments"), dict) else {}
+        flip_map = cfg.get("flips") if isinstance(cfg.get("flips"), dict) else {}
         for entry in cfg.get("devices") or []:
             entry = str(entry).strip()
             try:
@@ -909,6 +1006,8 @@ class GoveeFX:
                     self.lights.append(HaLight(entry, cfg["ha_url"], cfg["ha_token"], self._session, nseg))
                 elif entry:
                     self.lights.append(LanLight(entry, nseg))
+                if self.lights and entry in flip_map and self.lights[-1].name == entry:
+                    self.lights[-1].flip = bool(flip_map[entry])
             except Exception as exc:  # noqa: BLE001 - a bad entry must not stop the plugin
                 self.log.warning("govee: could not set up %s: %s", entry, exc)
         if self.lights and self._thread is None:
@@ -917,23 +1016,35 @@ class GoveeFX:
 
     # -- API ------------------------------------------------------------
 
-    def trigger(self, event: str, primary: Any = "ffffff", accent: Any = "ffffff") -> bool:
-        """Queue an effect for an event ('score', 'big_score', 'against', ...). Returns whether one was queued."""
+    def trigger(self, event: str, primary: Any = "ffffff", accent: Any = "ffffff", label: str = "") -> bool:
+        """Queue an effect for an event ('score', 'big_score', 'against', ...). Returns whether one was queued.
+        label says what happened ('PHI touchdown'); it only appears in the portal's activity list."""
         try:
             self._sync_central()
             spec = self.events.get(event)
-            if not self.enabled or not self.lights or not spec or spec.get("effect", "off") == "off":
-                return False
-            now = time.monotonic()
-            if now - self._last_end < self.cooldown and event != "big_score":
+            why = ""
+            if not self.enabled:
+                why = "lights are switched off (master switch, or this sport)"
+            elif not self.lights:
+                why = "no light is switched on"
+            elif not spec or spec.get("effect", "off") == "off":
+                why = "that moment is switched off"
+            elif time.monotonic() - self._last_end < self.cooldown and event != "big_score":
+                why = "cooldown (another effect just played)"
+            if why:
+                record(self.sport, event, label, (spec or {}).get("effect", ""), "skipped", why)
+                self.log.info("govee[%s]: %s %s skipped: %s", self.sport or "-", event, label, why)
                 return False
             over = self.colors.get(event) if isinstance(self.colors.get(event), dict) else {}
             if over.get("primary"):                  # colours the user picked are used as picked
                 p, a = parse_color(over["primary"]), parse_color(over.get("accent", "ffffff"))
             else:
                 p, a = team_colors(primary, accent)
+            entry = record(self.sport, event, label, str(spec.get("effect", "burst")), "playing",
+                           "%d light%s" % (len(self.lights), "" if len(self.lights) == 1 else "s"))
+            self.log.info("govee[%s]: %s %s -> %s on %d light(s)", self.sport or "-", event, label, spec.get("effect"), len(self.lights))
             with self._cv:
-                self._job = (str(spec.get("effect", "burst")), p, a, float(spec.get("seconds", 6)))
+                self._job = (str(spec.get("effect", "burst")), p, a, float(spec.get("seconds", 6)), entry)
                 self._gen += 1
                 self.idle.clear()
                 self._cv.notify()
@@ -986,8 +1097,8 @@ class GoveeFX:
             with _PLAY_LOCK:
                 self._play(job, gen)
 
-    def _play(self, job: Tuple[str, RGB, RGB, float], gen: int) -> None:
-        effect, p, a, dur = job
+    def _play(self, job: Tuple[str, RGB, RGB, float, Dict[str, Any]], gen: int) -> None:
+        effect, p, a, dur, entry = job
         lights = self.lights                # a config reload mid-effect must not change who we restore
         if self._snaps is None:
             self._snaps = [self._safe(l.snapshot) for l in lights]
@@ -997,10 +1108,14 @@ class GoveeFX:
         start = time.monotonic()
         for t, i, rgb, last in steps:
             if not self._sleep_until(start + t / self.time_scale, gen):
+                entry["status"] = "interrupted"
                 return                      # a newer effect (or close) took over; it will restore
             if not last and time.monotonic() - (start + t / self.time_scale) > 0.5:
                 continue                    # running behind (slow Home Assistant): skip, catch up
-            self._safe(lights[i].show_segments if isinstance(rgb, list) else lights[i].show, rgb)
+            if isinstance(rgb, list):
+                self._safe(lights[i].show_segments, rgb[::-1] if getattr(lights[i], "flip", False) else rgb)
+            else:
+                self._safe(lights[i].show, rgb)
         if self._gen != gen:
             return
         time.sleep(0.25 / self.time_scale)
@@ -1008,6 +1123,7 @@ class GoveeFX:
         for l, s in zip(lights, snaps or []):
             self._safe(l.restore, s, self.fallback)
         self._last_end = time.monotonic()
+        entry["status"] = "done"
         if self._gen == gen:
             self.idle.set()
 

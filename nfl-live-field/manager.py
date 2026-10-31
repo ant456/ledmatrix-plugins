@@ -307,7 +307,8 @@ class NflLiveFieldPlugin(BasePlugin):
             if event == "score" and alert.get("kind") in self.GOVEE_BIG:
                 event = "big_score"
             if event:
-                self.govee.trigger(event, alert.get("primary"), alert.get("accent"))
+                self.govee.trigger(event, alert.get("primary"), alert.get("accent"),
+                                   label="%s %s" % (alert.get("team", ""), str(alert.get("kind", "")).title()))
         except Exception as exc:  # noqa: BLE001 - lights must never break the display
             self.logger.debug("Govee trigger skipped: %s", exc)
 

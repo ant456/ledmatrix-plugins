@@ -1,7 +1,7 @@
 {
   "id": "govee-lights",
   "name": "Govee Lights",
-  "version": "1.1.0",
+  "version": "1.3.0",
   "author": "ant456",
   "description": "Web portal for the Govee light effects that the NFL, NBA and NHL plugins play when a team scores. Pick your lights (Govee LAN control or Home Assistant), pick an effect for each moment with live previews, choose team colors or your own, and press Test. Shows nothing on the panel.",
   "entry_point": "manager.py",
@@ -26,6 +26,18 @@
     ">=3.0.0"
   ],
   "versions": [
+    {
+      "version": "1.3.0",
+      "released": "2026-10-30",
+      "ledmatrix_min": "2.0.0",
+      "notes": "Recent activity panel: every time a sports plugin tries to flash the lights it is listed with the result, including why it did not. The Govee helper now shares one listener, one lock and one activity log across all plugins (the core loads each plugin's modules in isolation, so each used to have its own), and every light trigger is logged, including why one was skipped."
+    },
+    {
+      "version": "1.2.0",
+      "released": "2026-10-30",
+      "ledmatrix_min": "2.0.0",
+      "notes": "New effect: rocket. It shoots up a sectioned light from the bottom to the top, bursts at the top and showers down like fireworks (on a light with no sections it swells, pops and sparkles out). A Reverse option per light handles lights mounted the other way up."
+    },
     {
       "version": "1.1.0",
       "released": "2026-10-30",

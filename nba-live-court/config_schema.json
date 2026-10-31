@@ -392,7 +392,7 @@
         "events": {
           "type": "object",
           "default": {},
-          "description": "Effect per event: score (a favorite scores), big_score (lead changes), against (the other side scores on a favorite; off by default). Each is {\"effect\": name, \"seconds\": n} or just the effect name. Effects: burst, flash, pulse, chase, strobe, fireworks, glow, off"
+          "description": "Effect per event: score (a favorite scores), big_score (lead changes), against (the other side scores on a favorite; off by default). Each is {\"effect\": name, \"seconds\": n} or just the effect name. Effects: burst, rocket, flash, pulse, chase, strobe, fireworks, glow, off"
         },
         "colors": {
           "type": "object",
@@ -424,6 +424,22 @@
           "description": "What to do afterwards if a light's earlier state could not be read"
         }
       }
+    },
+    "govee_score_points": {
+      "type": "integer",
+      "default": 3,
+      "minimum": 0,
+      "maximum": 20,
+      "title": "Lights: points for a score flash",
+      "description": "How many points a favorite team must score between two updates to play the Govee 'score' effect. 2 flashes for every basket, 3 only for threes and bigger scores, 0 turns it off so only big moments flash. Basketball scores constantly, so keep this at 3 or more unless you want a lot of flashing"
+    },
+    "govee_run_points": {
+      "type": "integer",
+      "default": 8,
+      "minimum": 0,
+      "maximum": 40,
+      "title": "Lights: run size for a big moment",
+      "description": "Play the Govee 'big moment' effect when a favorite team's unanswered scoring run reaches this many points. 0 turns it off"
     }
   }
 }

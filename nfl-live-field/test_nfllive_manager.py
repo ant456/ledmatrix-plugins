@@ -496,7 +496,7 @@ class GoveeRecorder:
     def __init__(self):
         self.calls = []
 
-    def trigger(self, event, primary="ffffff", accent="ffffff"):
+    def trigger(self, event, primary="ffffff", accent="ffffff", label=""):
         self.calls.append((event, primary, accent))
         return True
 

@@ -79,6 +79,7 @@ class NbaLiveCourtPlugin(BasePlugin):
         super().__init__(plugin_id, config, display_manager, cache_manager, plugin_manager)
         self._load_config(config)
         self.govee = GoveeFX(config.get("govee"), self.logger, sport="nba")
+        self._govee_fired: Dict[str, str] = {}
         self.data = NbaLiveData(cache_manager, self.logger, plugin_id, self.request_timeout)
         self.headshots = HeadshotStore(self.data, self.logger)
 
@@ -132,6 +133,8 @@ class NbaLiveCourtPlugin(BasePlugin):
         self.show_headshots = bool(config.get("show_headshots", True))
         self.score_alerts = bool(config.get("score_alerts", True))
         self.alert_min_points = _safe_int(config.get("alert_min_points", 8), 8, 0, 40)
+        self.govee_score_points = _safe_int(config.get("govee_score_points", 3), 3, 0, 20)
+        self.govee_run_points = _safe_int(config.get("govee_run_points", 8), 8, 0, 40)
         self.alert_all = bool(config.get("celebrate_all_teams", False))
         self.spoiler_delay = float(_safe_int(config.get("spoiler_delay_seconds", 0), 0, 0, 300))
         self.display_duration = _safe_int(config.get("display_duration", 20), 20, 5, 300)
@@ -296,11 +299,15 @@ class NbaLiveCourtPlugin(BasePlugin):
         """Track each game's scoring run and queue a burst for a big run or a late lead change."""
         current = {g["id"]: g for g in games}
         fresh = self._previous_ts is not None and 0 <= snapshot_ts - self._previous_ts <= self.STALE_GAP_SECONDS
+        self._govee_fired = {}
         for game_id, game in current.items():
             previous = self._previous.get(game_id) if fresh else None
-            run = model.update_run(self._runs.get(game_id), previous, game) if game["live"] else None
+            old_run = self._runs.get(game_id)
+            run = model.update_run(old_run, previous, game) if game["live"] else None
             self._runs[game_id] = run
             game["run"] = run
+            if previous and game["live"] and not model.involves(game, self.exclude):
+                self._govee_scoring(previous, game, old_run, run)
             if not previous or not self.score_alerts or model.involves(game, self.exclude):
                 continue
             alert = model.detect_alert(previous, game, self.alert_min_points, now)
@@ -316,7 +323,31 @@ class NbaLiveCourtPlugin(BasePlugin):
         self._previous = current
         self._previous_ts = snapshot_ts
 
-    GOVEE_BIG = {"LEAD CHANGE"}
+    GOVEE_BIG = {"LEAD CHANGE", "BIG RUN"}
+
+    def _govee_scoring(self, previous: Dict[str, Any], game: Dict[str, Any], old_run: Optional[Dict[str, Any]],
+                       run: Optional[Dict[str, Any]]) -> None:
+        """Lights for baskets, which the on-panel bursts deliberately skip: a favorite scoring govee_score_points or more
+        between updates ('score'), and an unanswered run reaching govee_run_points ('big_score'). Never raises."""
+        try:
+            for side in ("home", "away"):
+                team = game[side]
+                if self.favorites and not self.alert_all and team["abbr"] not in self.favorites:
+                    continue
+                gain = team["score"] - previous[side]["score"]
+                reached = bool(run and run.get("side") == side and self.govee_run_points > 0 and run["points"] >= self.govee_run_points)
+                was = bool(old_run and old_run.get("side") == side and old_run["points"] >= self.govee_run_points)
+                if reached and not was:
+                    event, label = "big_score", "%s %d-0 run" % (team["abbr"], run["points"])
+                elif self.govee_score_points > 0 and gain >= self.govee_score_points:
+                    event, label = "score", "%s +%d" % (team["abbr"], gain)
+                else:
+                    continue
+                self._govee_fired[game["id"]] = event
+                self.govee.trigger(event, team.get("color"), team.get("alt_color"), label=label)
+                return                                   # one effect per game per update
+        except Exception as exc:  # noqa: BLE001 - lights must never break the display
+            self.logger.debug("Govee scoring check skipped: %s", exc)
 
     def _govee_alert(self, game: Dict[str, Any], alert: Dict[str, Any]) -> None:
         """Flash the Govee lights for this score: 'score' for a favorite (or any team when none are set),
@@ -329,8 +360,13 @@ class NbaLiveCourtPlugin(BasePlugin):
                 event = "score"
             if event == "score" and alert.get("kind") in self.GOVEE_BIG:
                 event = "big_score"
+            done = self._govee_fired.get(game["id"])
+            if done == event or (event == "score" and done):
+                return                                   # the basket check above already flashed for this update
             if event:
-                self.govee.trigger(event, alert.get("primary"), alert.get("accent"))
+                self._govee_fired[game["id"]] = event
+                self.govee.trigger(event, alert.get("primary"), alert.get("accent"),
+                                   label="%s %s" % (alert.get("team", ""), str(alert.get("kind", "")).title()))
         except Exception as exc:  # noqa: BLE001 - lights must never break the display
             self.logger.debug("Govee trigger skipped: %s", exc)
 

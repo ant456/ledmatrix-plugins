@@ -588,7 +588,7 @@ class GoveeRecorder:
     def __init__(self):
         self.calls = []
 
-    def trigger(self, event, primary="ffffff", accent="ffffff"):
+    def trigger(self, event, primary="ffffff", accent="ffffff", label=""):
         self.calls.append((event, primary, accent))
         return True
 
@@ -636,7 +636,7 @@ def test_govee_treats_every_team_as_a_score_when_no_favorites_are_set():
 
 
 def test_govee_follows_the_panel_alert_setting():
-    p, a = govee_scene(lambda a: [a["team"]], score_alerts=False)
+    p, a = govee_scene(lambda a: [a["team"]], score_alerts=False, govee_score_points=0, govee_run_points=0)
     assert p.govee.calls == []
 
 
@@ -649,3 +649,85 @@ def test_govee_is_off_by_default_and_a_broken_light_cannot_break_the_plugin():
     q, a = govee_scene(lambda a: [a["team"]])
     q.govee = Boom()
     score_now(q)                        # must not raise
+
+
+# ---- NBA lights: baskets and runs --------------------------------------------------------------
+
+def basket_scene(config=None, gain=3, side="home", old_gain=0, favorites="side"):
+    """A live game where `side` gains `gain` points between two updates (after `old_gain` earlier unanswered points)."""
+    import copy
+    probe = make()
+    probe.update()
+    live = [g for g in probe.all_games if g["live"]][0]
+    fav = {"side": [live[side]["abbr"]], "other": [live["away" if side == "home" else "home"]["abbr"]], "none": []}[favorites]
+    p = make({"favorite_teams": fav, **(config or {})})
+    p.govee = GoveeRecorder()
+    p.update()
+    live = [g for g in p.all_games if g["live"]][0]
+    prev = copy.deepcopy(live)
+    cur = copy.deepcopy(live)
+    cur[side]["score"] += gain
+    p._previous = {prev["id"]: prev}
+    p._previous_ts = 100.0
+    p._runs = {prev["id"]: {"side": side, "points": old_gain}} if old_gain else {}
+    p._detect_scores([cur], 101.0, 130.0)
+    return p, cur
+
+
+def test_nba_a_three_flashes_the_score_effect_in_team_colours():
+    p, game = basket_scene(gain=3)
+    assert [c[0] for c in p.govee.calls] == ["score"]
+    _, primary, accent = p.govee.calls[0]
+    assert (primary, accent) == (game["home"]["color"], game["home"]["alt_color"])
+
+
+def test_nba_a_two_pointer_is_quiet_by_default_but_can_be_asked_for():
+    p, _ = basket_scene(gain=2)
+    assert p.govee.calls == []
+    q, _ = basket_scene({"govee_score_points": 2}, gain=2)
+    assert [c[0] for c in q.govee.calls] == ["score"]
+
+
+def test_nba_score_flash_can_be_switched_off():
+    p, _ = basket_scene({"govee_score_points": 0, "govee_run_points": 0}, gain=3)
+    assert p.govee.calls == []
+
+
+def test_nba_an_eight_point_run_is_one_big_moment_not_two():
+    p, _ = basket_scene(gain=8)             # the run check and the on-panel big-run alert both see it
+    assert [c[0] for c in p.govee.calls] == ["big_score"]
+
+
+def test_nba_a_run_only_counts_when_it_first_reaches_the_size():
+    p, _ = basket_scene({"alert_min_points": 0}, gain=2, old_gain=8)    # already 8, now 10: not a new big moment
+    assert p.govee.calls == []
+    q, _ = basket_scene({"alert_min_points": 0}, gain=2, old_gain=6)    # 6 then +2 reaches 8
+    assert [c[0] for c in q.govee.calls] == ["big_score"]
+
+
+def test_nba_the_other_team_scoring_never_flashes_for_baskets():
+    p, _ = basket_scene(gain=3, favorites="other")
+    assert p.govee.calls == []
+
+
+def test_nba_with_no_favorites_every_team_counts():
+    p, _ = basket_scene(gain=3, favorites="none")
+    assert [c[0] for c in p.govee.calls] == ["score"]
+
+
+def test_nba_basket_flash_does_not_need_the_panel_alerts():
+    p, _ = basket_scene({"score_alerts": False}, gain=3)
+    assert [c[0] for c in p.govee.calls] == ["score"]
+
+
+def test_nba_labels_say_what_happened():
+    p, game = basket_scene(gain=3)
+    assert p.govee.calls[0][0] == "score"
+    seen = []
+    p2, _ = basket_scene(gain=3)
+    p2.govee.trigger = lambda event, primary="", accent="", label="": seen.append(label)
+    p2._previous = {game["id"]: __import__("copy").deepcopy(game)}
+    g2 = __import__("copy").deepcopy(game)
+    g2["home"]["score"] += 3
+    p2._detect_scores([g2], 102.0, 131.0)
+    assert seen and "+3" in seen[0]

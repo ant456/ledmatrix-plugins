@@ -486,7 +486,7 @@ class Segments(unittest.TestCase):
 
     def test_effects_really_use_the_segments(self):
         p, a = g.team_colors("013369", "ffb612")
-        for name in ("burst", "chase", "fireworks", "pulse", "strobe", "glow"):
+        for name in ("burst", "rocket", "chase", "fireworks", "pulse", "strobe", "glow"):
             fr = g.frames(name, p, a, 8.0, 8)
             self.assertTrue(any(len(set(cols)) > 1 for _, cols in fr), name + " never varies along the light")
 
@@ -622,6 +622,167 @@ class SegmentsOnHomeAssistant(unittest.TestCase):
 
         got = {x["id"]: x["segments"] for x in g.list_ha_lights("http://ha", "T", False, S())}
         self.assertEqual(got, {"light.dj": 12, "light.plain": 1, "light.bed": 1})
+
+
+class Rocket(unittest.TestCase):
+    P, A = (255, 0, 0), (0, 0, 255)
+
+    def test_the_rocket_climbs_from_the_bottom_to_the_top(self):
+        n = 10
+        fr = g.frames("rocket", self.P, self.A, 8.0, n)
+        first_climb = []
+        for _, cols in fr[:n]:                                   # the first pass up the light
+            lum = [sum(c) for c in cols]
+            first_climb.append(lum.index(max(lum)))
+        self.assertEqual(first_climb, sorted(first_climb))
+        self.assertEqual(first_climb[0], 0)
+        self.assertEqual(first_climb[-1], n - 1)
+
+    def test_it_accelerates(self):
+        n = 12
+        fr = g.frames("rocket", self.P, self.A, 8.0, n)
+        heads = []
+        for _, cols in fr[:int(n * 1.2)]:
+            lum = [sum(c) for c in cols]
+            heads.append(lum.index(max(lum)))
+        steps = [b - a for a, b in zip(heads, heads[1:]) if b >= a]
+        self.assertLessEqual(sum(steps[:3]), sum(steps[-3:]))
+
+    def test_it_bursts_white_at_the_top_then_sparkles_downward(self):
+        n = 10
+        fr = g.frames("rocket", self.P, self.A, 8.0, n)
+        burst = next(cols for _, cols in fr if g.WHITE in cols)
+        self.assertEqual(burst[-1], g.WHITE)                      # the top is lit white
+        self.assertEqual(burst[0], g.BLACK)                       # the bottom is not, yet
+        later = [cols for _, cols in fr[n + 5:n + 18]]
+        self.assertTrue(any(cols[n // 2] != g.BLACK for cols in later))
+
+    def test_a_long_effect_fires_more_than_one_rocket(self):
+        fr = g.frames("rocket", self.P, self.A, 14.0, 8)
+        whites = sum(1 for _, cols in fr if cols[-1] == g.WHITE and cols[0] == g.BLACK)
+        self.assertGreater(whites, 3)
+        colours = {c for _, cols in fr for c in cols}
+        self.assertIn(self.A, colours)                            # the second rocket is the second colour
+
+    def test_a_light_without_sections_swells_pops_and_fades(self):
+        st = g.fx_rocket(self.P, self.A, 8.0)
+        self.assertIn(g.WHITE, [c for _, c in st])
+        ts = [t for t, _ in st]
+        self.assertEqual(ts, sorted(ts))
+        self.assertLessEqual(ts[-1], 8.0 + 1e-6)
+
+    def test_it_is_offered_in_the_picker(self):
+        self.assertIn("rocket", g.PICKABLE)
+        self.assertIn("rocket", g.SEG_EFFECTS)
+
+
+class Reverse(unittest.TestCase):
+    def setUp(self):
+        self.dev = FakeLight(14003)
+
+    def tearDown(self):
+        self.dev.stop()
+
+    def first_mask(self, flip):
+        import base64
+        cfg = {"enabled": True, "devices": ["127.0.0.1:14003"], "segments": {"127.0.0.1:14003": 8},
+               "flips": {"127.0.0.1:14003": True} if flip else {}, "events": {"score": {"effect": "rocket", "seconds": 8}},
+               "cooldown_seconds": 0}
+        fx = g.GoveeFX(cfg, central=False)
+        fx.trigger("score", "013369", "ffb612")
+        wait_done(fx)
+        fx.close()
+        for cmd, data in self.dev.cmds:
+            if cmd == "ptReal":
+                raw = base64.b64decode(data["command"][0])
+                return raw[12] | raw[13] << 8
+        self.fail("no segment packet")
+
+    def test_reverse_flips_which_end_the_rocket_starts_from(self):
+        normal = self.first_mask(False)
+        self.dev.cmds.clear()
+        flipped = self.first_mask(True)
+        self.assertTrue(normal & 1 or normal & 0b11)              # starts at section 1
+        self.assertTrue(flipped & 0x80 or flipped & 0xC0)         # starts at the last section
+
+    def test_config_round_trip(self):
+        c = g.clean_config({"lights": [{"id": "192.168.0.9", "segments": 8, "flip": True}, {"id": "192.168.0.10"}]})
+        self.assertEqual([l["flip"] for l in c["lights"]], [True, False])
+        cfg = g.central_to_cfg({"enabled": True, "lights": c["lights"]}, "nfl")
+        self.assertEqual(cfg["flips"], {"192.168.0.9": True})
+        fx = g.GoveeFX(None, central=False)
+        fx._apply(cfg)
+        self.assertTrue(fx.lights[0].flip)
+        self.assertFalse(getattr(fx.lights[1], "flip", False))
+        fx.close()
+
+
+class SharedStateAndActivity(unittest.TestCase):
+    def setUp(self):
+        self.dev = FakeLight(14003)
+
+    def tearDown(self):
+        self.dev.stop()
+
+    def test_an_isolated_second_copy_shares_the_listener_the_lock_and_the_log(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("govee_fx_second_copy", g.__file__)
+        other = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(other)                       # what the plugin loader does for each plugin
+        self.assertIsNot(other, g)
+        self.assertIs(other.LanTransport.get(), g.LanTransport.get())      # one socket on the reply port, not several
+        self.assertIs(other._PLAY_LOCK, g._PLAY_LOCK)                      # one effect at a time across plugins
+        g.record("nfl", "score", "PHI shared-test", "burst", "playing")
+        self.assertEqual(other.activity(1)[0]["label"], "PHI shared-test")
+
+    def make(self, **extra):
+        cfg = {"enabled": True, "devices": ["127.0.0.1:14003"], "cooldown_seconds": 0,
+               "events": {"score": {"effect": "glow", "seconds": 4}}}
+        cfg.update(extra)
+        return g.GoveeFX(cfg, central=False, sport="nba")
+
+    def last(self):
+        return g.activity(1)[0]
+
+    def test_a_played_effect_is_logged_playing_then_done(self):
+        fx = self.make()
+        fx.trigger("score", "013369", "ffb612", label="PHI +3")
+        e = self.last()
+        self.assertEqual((e["sport"], e["event"], e["label"], e["status"]), ("NBA", "score", "PHI +3", "playing"))
+        self.assertTrue(wait_done(fx))
+        self.assertEqual(self.last()["status"], "done")
+        fx.close()
+
+    def test_every_reason_for_not_flashing_is_logged(self):
+        off = g.GoveeFX({"enabled": False, "devices": ["127.0.0.1:14003"]}, central=False, sport="nhl")
+        off.trigger("score", label="TOR goal")
+        self.assertEqual((self.last()["status"], "switched off" in self.last()["detail"]), ("skipped", True))
+
+        nolights = g.GoveeFX({"enabled": True, "devices": []}, central=False, sport="nhl")
+        nolights.trigger("score", label="x")
+        self.assertIn("no light", self.last()["detail"])
+
+        fx = self.make()
+        fx.trigger("against", label="y")                    # off by default
+        self.assertIn("switched off", self.last()["detail"])
+        fx.close()
+
+        cool = self.make(cooldown_seconds=60)
+        cool.trigger("score", "013369", "ffb612", label="a")
+        wait_done(cool)
+        self.assertFalse(cool.trigger("score", "013369", "ffb612", label="b"))
+        self.assertIn("cooldown", self.last()["detail"])
+        cool.close()
+
+    def test_a_newer_effect_marks_the_older_one_interrupted(self):
+        fx = self.make(events={"score": {"effect": "glow", "seconds": 30}})
+        fx.trigger("score", "013369", "ffb612", label="first")
+        time.sleep(0.3)
+        fx.trigger("big_score", "ff0000", "ffffff", label="second")
+        wait_done(fx, 10)
+        fx.close()
+        first = next(e for e in g.activity(10) if e["label"] == "first")
+        self.assertEqual(first["status"], "interrupted")
 
 
 if __name__ == "__main__":

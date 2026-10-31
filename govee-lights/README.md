@@ -5,19 +5,21 @@
 This plugin shows nothing on the LED panel. It hosts a settings page (port 5020 by default) for the score effects built into **NFL Live Field**, **NBA Live Court** and **NHL Live Ice**. Everything you set is saved to one file, `config/govee_fx.json`, that all three plugins share and re-read the moment it changes, so there is nothing to restart.
 
 - **Light picker:** scan the network for Govee lights with LAN Control, add Home Assistant lights from a searchable list, or type an address. Name each light, switch it on or off for games, and press **Blink** to find out which is which.
-- **Effect picker:** seven effects (burst, fireworks, flash, pulse, chase, strobe, glow), each with an animated preview in your team's colors. Set the length, and use team colors or your own two colors.
+- **Effect picker:** eight effects (burst, rocket, fireworks, flash, pulse, chase, strobe, glow), each with an animated preview in your team's colors. Set the length, and use team colors or your own two colors.
 - **Per-sport settings:** set everything once for all sports, then override a moment for a single sport (a different effect for hockey, say).
 - **Three moments:** your team scores, a big moment (touchdown, NBA lead change, hockey overtime or go-ahead goal), and scored against you (off until you turn it on).
+- **Recent activity:** every time a sports plugin tries to flash the lights it appears on the page with the result (playing, done, or skipped and why, such as the master switch being off or the cooldown). If nothing flashed during a game, look here first.
 - **Test button:** plays exactly what is on the page, saved or not, on the lights you tick, for the team you choose, then puts every light back as it was.
 - **Works with or without Home Assistant.** Lights that support Govee LAN Control need nothing else. Others go through Home Assistant, whose address and token are read on the Pi from LEDMatrix's own config and never sent to the browser.
 
 ## RGBIC lights and sections
 
-RGBIC lights are made of sections that can each show their own color, and the effects use them: **chase** sends a comet along the light, **fireworks** pop on single sections, **burst** swaps alternating sections between the two colors, **pulse** ripples along the light, **strobe** alternates sections, and **glow** fills up like a meter. A light with one section simply changes color as a whole.
+RGBIC lights are made of sections that can each show their own color, and the effects use them: **rocket** shoots up the light from the bottom, bursts at the top and showers down, **chase** sends a comet along the light, **fireworks** pop on single sections, **burst** swaps alternating sections between the two colors, **pulse** ripples along the light, **strobe** alternates sections, and **glow** fills up like a meter. A light with one section simply changes color as a whole.
 
 - Set **Sections** on each light (1 to 16). For Home Assistant lights that have numbered segment entities (`light.name_segment_1`, `_2`, ...) the portal fills it in for you.
 - Not sure how many your light has? Press **Show sections**. It lights each section in turn (up to 16). The last one that lights is the count. Nothing lights past the end.
 - LAN lights use Govee's local segment command. It is not part of Govee's published LAN API, so if a model does not respond to it the light just does not change; use **Show sections** to check yours.
+- **Reverse:** section 1 is where **rocket** starts. If your light is mounted so that section 1 is at the top, tick **Reverse** on that light. **Show sections** lights section 1 first, so you can see which end that is.
 - Several lights still run the effect a moment apart, so the pattern can travel from one light to the next.
 - Home Assistant's single combined "segments" entities (for example `light.bed_lights_segments`) cannot be split, so those lights act as one section.
 - If a Home Assistant light was playing a scene when the effect started, the scene is switched back on afterwards. A LAN light cannot report its scene, so it comes back as its last solid color.

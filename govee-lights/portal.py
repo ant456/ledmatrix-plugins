@@ -102,10 +102,10 @@ class Portal:
     # -- playing -----------------------------------------------------------
 
     def _fx(self, devices: List[str], events: Dict[str, Any], colors: Dict[str, Any],
-            segments: Optional[Dict[str, int]] = None) -> g.GoveeFX:
+            segments: Optional[Dict[str, int]] = None, flips: Optional[Dict[str, bool]] = None) -> g.GoveeFX:
         ha = self.ha()
         cfg = self.load()
-        return g.GoveeFX({"enabled": True, "devices": devices, "events": events, "colors": colors, "segments": segments or {},
+        return g.GoveeFX({"enabled": True, "devices": devices, "events": events, "colors": colors, "segments": segments or {}, "flips": flips or {},
                           "ha_url": ha["url"], "ha_token": ha["token"], "cooldown_seconds": 0,
                           "stagger_seconds": cfg["stagger_seconds"], "restore_fallback": cfg["restore_fallback"]},
                          self.log, self.session, central=False)
@@ -155,7 +155,7 @@ class Portal:
                 obj.show_segments(cols)
                 self._test["message"] = "Section %d of %d. Count how many sections light up; nothing lights past the last one." % (k + 1, n)
                 time.sleep(0.8)
-            self._test.update(ok=True, message="Done. Enter how many sections lit up, then Save. The light is back how it was.")
+            self._test.update(ok=True, message="Done. Enter how many sections lit up, then Save. Section 1 is where the rocket starts: if that is the top, tick Reverse. The light is back how it was.")
         except Exception as exc:  # noqa: BLE001
             self._test.update(ok=False, message="Section test failed: %s" % exc)
         finally:
@@ -184,15 +184,17 @@ class Portal:
         label = "%s on %d light%s" % (spec["effect"], len(lights), "" if len(lights) == 1 else "s")
         raw_segs = req.get("segments") if isinstance(req.get("segments"), dict) else {}
         segs = {i: max(1, min(g.MAX_SEGMENTS, int(raw_segs.get(i, 1)))) for i in lights if str(raw_segs.get(i, 1)).isdigit()}
-        threading.Thread(target=self._play, args=(lights, spec["effect"], spec["seconds"], colors, label, segs), daemon=True).start()
+        raw_flips = req.get("flips") if isinstance(req.get("flips"), dict) else {}
+        flips = {i: True for i in lights if raw_flips.get(i) is True}
+        threading.Thread(target=self._play, args=(lights, spec["effect"], spec["seconds"], colors, label, segs, flips), daemon=True).start()
         return {"ok": True, "message": "Playing " + label}
 
     def _play(self, lights: List[str], effect: str, seconds: float, colors: Dict[str, Any], label: str,
-              segments: Optional[Dict[str, int]] = None) -> None:
+              segments: Optional[Dict[str, int]] = None, flips: Optional[Dict[str, bool]] = None) -> None:
         self._test.update(running=True, ok=None, message="Playing: " + label, started=time.time())
         fx = None
         try:
-            fx = self._fx(lights, {"test": {"effect": effect, "seconds": seconds}}, {"test": colors} if colors else {}, segments)
+            fx = self._fx(lights, {"test": {"effect": effect, "seconds": seconds}}, {"test": colors} if colors else {}, segments, flips)
             if not fx.lights:
                 self._test.update(ok=False, message="None of those lights could be set up (is Home Assistant configured?)")
                 return
@@ -208,6 +210,10 @@ class Portal:
 
     def test_state(self) -> Dict[str, Any]:
         return dict(self._test)
+
+    def activity(self) -> List[Dict[str, Any]]:
+        """What the sports plugins just tried to do (shared with this page across the process)."""
+        return g.activity(30)
 
     # -- helpers for the page ----------------------------------------------
 
@@ -301,6 +307,10 @@ def create_app(portal: Portal, static_dir: Path):
     @app.get("/api/test")
     def test_state():
         return jsonify(portal.test_state())
+
+    @app.get("/api/activity")
+    def activity():
+        return jsonify(portal.activity())
 
     @app.get("/api/teams")
     def teams():

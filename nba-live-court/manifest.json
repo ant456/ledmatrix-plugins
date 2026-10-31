@@ -1,7 +1,7 @@
 {
   "id": "nba-live-court",
   "name": "NBA Live Court",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "author": "ant456",
   "description": "An arcade-style NBA show with three modes: live games (an LED arena scoreboard with clock, quarter and records, quarter scores, a flame on scoring runs, player cards with ESPN headshots and rarity frames, bursts for big runs and late lead changes), recently finished games (final score plus the same stat cards), and upcoming games (matchup, records, tip-off and spread). Pick favorite teams and switch on the favorites lock to show only their games in every mode. ESPN's public scoreboard, no API key.",
   "entry_point": "manager.py",
@@ -31,6 +31,18 @@
     ">=3.0.0"
   ],
   "versions": [
+    {
+      "version": "1.3.0",
+      "released": "2026-10-30",
+      "ledmatrix_min": "2.0.0",
+      "notes": "Lights now flash for baskets, not just rare bursts: govee_score_points (default 3) is how many points a favorite must score between updates for the 'score' effect, and govee_run_points (default 8) plays the 'big moment' when an unanswered run reaches that size. The Govee helper now shares one listener, one lock and one activity log across all plugins (the core loads each plugin's modules in isolation, so each used to have its own), and every light trigger is logged, including why one was skipped."
+    },
+    {
+      "version": "1.2.3",
+      "released": "2026-10-30",
+      "ledmatrix_min": "2.0.0",
+      "notes": "New effect: rocket. It shoots up a sectioned light from the bottom to the top, bursts at the top and showers down like fireworks (on a light with no sections it swells, pops and sparkles out). A Reverse option per light handles lights mounted the other way up."
+    },
     {
       "version": "1.2.2",
       "released": "2026-10-30",

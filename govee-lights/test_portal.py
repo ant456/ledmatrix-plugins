@@ -284,5 +284,53 @@ class SegmentTests(Base):
         self.assertEqual(self.c.post("/api/previews", json={"segments": "junk"}).get_json()["burst"]["segments"], 1)
 
 
+class RocketPortal(Base):
+    def test_rocket_is_offered_and_reverse_is_saved(self):
+        j = self.c.get("/api/state").get_json()
+        self.assertIn("rocket", [e["key"] for e in j["effects"]])
+        r = self.c.post("/api/config", json={"enabled": True, "lights": [{"id": "127.0.0.1:14003", "segments": 8, "flip": True}],
+                                             "events": {"score": {"effect": "rocket", "seconds": 8}}})
+        c = r.get_json()["config"]
+        self.assertEqual((c["lights"][0]["flip"], c["events"]["score"]["effect"]), (True, "rocket"))
+
+    def test_the_test_button_honours_reverse(self):
+        import base64
+        masks = {}
+        for flip in (False, True):
+            self.dev.cmds.clear()
+            self.c.post("/api/test", json={"lights": ["127.0.0.1:14003"], "segments": {"127.0.0.1:14003": 8},
+                                           "flips": {"127.0.0.1:14003": True} if flip else {},
+                                           "spec": {"effect": "rocket", "seconds": 8}})
+            self.wait_test(20)
+            for cmd, data in self.dev.cmds:
+                if cmd == "ptReal":
+                    raw = base64.b64decode(data["command"][0])
+                    masks[flip] = raw[12] | raw[13] << 8
+                    break
+        self.assertTrue(masks[False] & 0b11)
+        self.assertTrue(masks[True] & 0xC0)
+
+    def test_rocket_preview_for_a_sectioned_light(self):
+        j = self.c.post("/api/previews", json={"primary": "013369", "accent": "ffb612", "segments": 8}).get_json()
+        self.assertEqual(j["rocket"]["segments"], 8)
+        self.assertTrue(all(len(cols) == 8 for _, cols in j["rocket"]["steps"]))
+
+
+class ActivityPortal(Base):
+    def test_activity_lists_what_the_plugins_tried_including_skips(self):
+        g.record("nba", "score", "PHI +3", "strobe", "playing", "4 lights")
+        g.record("nfl", "score", "PHI Touchdown", "burst", "skipped", "lights are switched off (master switch, or this sport)")
+        j = self.c.get("/api/activity").get_json()
+        assert [r["label"] for r in j[:2]] == ["PHI Touchdown", "PHI +3"]          # newest first
+        assert j[0]["status"] == "skipped" and "switched off" in j[0]["detail"]
+        assert j[1]["sport"] == "NBA"
+
+    def test_a_test_from_the_page_shows_up_in_the_activity(self):
+        self.c.post("/api/test", json={"lights": ["127.0.0.1:14003"], "spec": {"effect": "glow", "seconds": 4}})
+        self.wait_test()
+        top = self.c.get("/api/activity").get_json()[0]
+        self.assertEqual((top["event"], top["effect"], top["status"]), ("test", "glow", "done"))
+
+
 if __name__ == "__main__":
     unittest.main()

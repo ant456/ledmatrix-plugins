@@ -386,7 +386,7 @@
         "events": {
           "type": "object",
           "default": {},
-          "description": "Effect per event: score (a favorite scores), big_score (touchdowns), against (the other side scores on a favorite; off by default). Each is {\"effect\": name, \"seconds\": n} or just the effect name. Effects: burst, flash, pulse, chase, strobe, fireworks, glow, off"
+          "description": "Effect per event: score (a favorite scores), big_score (touchdowns), against (the other side scores on a favorite; off by default). Each is {\"effect\": name, \"seconds\": n} or just the effect name. Effects: burst, rocket, flash, pulse, chase, strobe, fireworks, glow, off"
         },
         "colors": {
           "type": "object",
