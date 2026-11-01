@@ -31,7 +31,7 @@ Replaces `plex-marquee` + `now-playing`.
 |---|---|
 | Plex video (TMDB match) | Fanart.tv banner for `banner_seconds`, then an info card with the poster for `info_seconds` |
 | Anything with player art (music, native Plex entity) | Info card with that art and a small service badge |
-| YouTube TV / Netflix / Disney+ ... | LaMetric service icon (or your uploaded icon/GIF), title, time remaining, segmented progress bar |
+| YouTube TV / Netflix / Disney+ ... | crisp built-in service icon (or your uploaded icon/GIF), title, time remaining, segmented progress bar |
 | Nothing | Rotating banners: the ones you curate in the portal, else recently added on Plex |
 
 Only Plex titles are looked up on TMDB, so other apps can never pull in the banner of a show you don't own.
@@ -40,7 +40,7 @@ Only Plex titles are looked up on TMDB, so other apps can never pull in the bann
 
 - **Live** – the plugin's own current frame, what it thinks is playing, and the state of every player.
 - **Banners** – search Plex, pick any Fanart.tv banner, reorder / disable / remove. A picked banner is also used whenever that title plays.
-- **Icons & GIFs** – per-service icon override (PNG/GIF/JPG) and full-screen GIF (used when there is no album/poster art).
+- **Icons & GIFs** – per-service icon override (PNG/GIF/JPG; big images are shrunk smoothly and keep their proportions; the built-in 32x32 brand icons are used when there is no override) and full-screen GIF (used when there is no album/poster art).
 
 The portal has no login, same as the other LEDMatrix plugin portals: keep it on your LAN.
 

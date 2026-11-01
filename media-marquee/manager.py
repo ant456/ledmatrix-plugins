@@ -819,7 +819,8 @@ class MediaMarqueePlugin(BasePlugin):
         stalling the display loop."""
         if service in self._icon_frames:
             return self._icon_frames[service]
-        frames = self._load_icon_override(service) or self._load_lametric(service, network)
+        frames = (self._load_icon_override(service) or self._load_bundled(service)
+                  or self._load_lametric(service, network))
         if frames or network:
             self._icon_frames[service] = frames
         elif service not in self._icon_loading:
@@ -848,12 +849,32 @@ class MediaMarqueePlugin(BasePlugin):
                     return fr
         return None
 
+    def _load_bundled(self, service: str) -> Optional[List[Image.Image]]:
+        """Crisp 32x32 brand icons shipped with the plugin (service_icons/<service>.png).
+        Order of preference: your uploaded icon, these, then the small LaMetric pixel art."""
+        p = self.plugin_dir / "service_icons" / f"{service}.png"
+        return self._frames_from_file(str(p)) if p.is_file() else None
+
     @staticmethod
-    def _frames_from_file(path: str) -> Optional[List[Image.Image]]:
+    def _to_tile(frame: Image.Image) -> Image.Image:
+        """A 32x32 RGBA frame. Big images are shrunk smoothly and keep their shape (padded, not stretched);
+        small pixel art is enlarged with hard edges."""
+        frame = frame.convert("RGBA")
+        if frame.size == (32, 32):
+            return frame
+        if frame.width > 32 or frame.height > 32:
+            fit = frame.copy()
+            fit.thumbnail((32, 32), Image.LANCZOS)
+            out = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+            out.paste(fit, ((32 - fit.width) // 2, (32 - fit.height) // 2))
+            return out
+        return frame.resize((32, 32), Image.NEAREST)
+
+    @classmethod
+    def _frames_from_file(cls, path: str) -> Optional[List[Image.Image]]:
         try:
             im = Image.open(path)
-            frames = [f.convert("RGBA").resize((32, 32), Image.NEAREST)
-                      for f in ImageSequence.Iterator(im)]
+            frames = [cls._to_tile(f) for f in ImageSequence.Iterator(im)]
             return frames or None
         except Exception:
             return None
@@ -1396,6 +1417,7 @@ class MediaMarqueePlugin(BasePlugin):
                 "key": k, "label": self._service_label(k),
                 "color": "#%02x%02x%02x" % SERVICE_COLORS.get(k, DEFAULT_COLOR),
                 "lametric_id": LAMETRIC_ICON_IDS.get(k),
+                "bundled_icon": (self.plugin_dir / "service_icons" / f"{k}.png").is_file(),
                 "icon_override": override_icon(k) is not None,
                 "gif": (self.gifs_dir / f"{k}.gif").exists(),
             } for k in keys])
