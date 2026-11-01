@@ -119,3 +119,60 @@ def empty(now: float, note: str = "CHECK FEEDS") -> Image.Image:
         d.big_number(img, "NO NEWS", W // 2, 13 - font.text_height(HERO) // 2, d.YELLOW, HERO, "center")
     d.text(img, note, W // 2, 21, d.GRAY, 1, "center")
     return img
+
+
+# ----------------------------------------------------------------------
+# continuous ticker
+# ----------------------------------------------------------------------
+
+BAR = 2                 # coloured bar that opens every headline
+PAD = 4                 # gap between that bar and the text
+GAP = 14                # gap after the text
+
+
+class Strip:
+    """Every headline laid end to end on one long image, drawn once.
+
+    ``spans[i]`` is the (start, end) x of headline ``i``; ``items[i]`` is the story.
+    The image is ``total`` pixels of one lap plus a copy of the first ``view_w``
+    pixels, so any window starting before ``total`` is complete and the lap
+    joins up with no seam.
+    """
+
+    def __init__(self, stories: list, view_w: int):
+        self.view_w = max(1, int(view_w))
+        stories = list(stories)
+        width_of = [BAR + PAD + font.text_width(s["title"], TITLE) + GAP for s in stories]
+        lap = sum(width_of)
+        if stories and lap < self.view_w:                      # short list: repeat it so a window is never empty
+            reps = -(-self.view_w // lap)
+            stories, width_of = stories * reps, width_of * reps
+        self.items = stories
+        self.spans = []
+        x = 0
+        for w in width_of:
+            self.spans.append((x, x + w))
+            x += w
+        self.total = x
+        self.image = Image.new("RGB", (max(1, self.total + self.view_w), H), d.BLACK)
+        if not stories:
+            return
+        ty = (H - font.text_height(TITLE)) // 2
+        for s, (a, b) in zip(stories, self.spans):
+            color = s["color"]
+            d.hgrad(self.image, a, 0, b - a, H, d.scale(color, 0.42), d.scale(color, 0.14))
+            d.rect(self.image, a, 0, BAR, H, color)
+            d.text(self.image, s["title"], a + BAR + PAD, ty, d.WHITE, TITLE, "left", d.BLACK)
+        self.image.paste(self.image.crop((0, 0, self.view_w, H)), (self.total, 0))
+
+    def index_at(self, x: float) -> int:
+        """Which headline owns column ``x`` of the lap."""
+        x = x % self.total if self.total else 0
+        for i, (a, b) in enumerate(self.spans):
+            if a <= x < b:
+                return i
+        return 0
+
+    def window(self, x: float) -> Image.Image:
+        x = int(x % self.total) if self.total else 0
+        return self.image.crop((x, 0, x + self.view_w, H))

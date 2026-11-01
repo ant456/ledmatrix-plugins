@@ -1,21 +1,36 @@
 {
   "id": "news-arcade",
   "name": "News Arcade",
-  "version": "1.0.0",
-  "description": "RSS headlines in the NBA / NFL / NHL Live arcade style: one story at a time with a feed logo tile, gradient headline row that crawls once so it is always read in full, age and summary, a segmented timer bar, and a BREAKING burst when a feed publishes a new top story. Feeds are shown round-robin; a failing feed keeps its last headlines. Replaces the news ticker.",
+  "version": "1.1.0",
+  "description": "RSS headlines in the NBA / NFL / NHL Live arcade style, as a continuous ticker: every story scrolls right to left on one strip (round-robin across feeds, so nothing is cut off and several stories are always on the way), a logo tile that follows the story at the edge, and a BREAKING burst when a feed publishes a new top story. A failing feed keeps its last headlines. Set layout to cards for the older one-story-at-a-time screens. Replaces the news ticker.",
   "author": "ant456",
   "entry_point": "manager.py",
   "class_name": "NewsArcadePlugin",
   "category": "content",
-  "tags": ["news", "rss", "headlines", "arcade"],
+  "tags": [
+    "news",
+    "rss",
+    "headlines",
+    "arcade"
+  ],
   "icon": "fas fa-newspaper",
-  "display_modes": ["news_arcade"],
+  "display_modes": [
+    "news_arcade"
+  ],
   "update_interval": 300,
   "default_duration": 45,
   "config_schema": "config_schema.json",
   "requirements_file": "requirements.txt",
-  "compatible_versions": [">=3.0.0"],
+  "compatible_versions": [
+    ">=3.0.0"
+  ],
   "versions": [
+    {
+      "version": "1.1.0",
+      "released": "2026-10-31",
+      "ledmatrix_min_version": "3.0.0",
+      "notes": "Continuous ticker layout (default): all headlines scroll on one strip instead of one cut-off headline at a time; smaller default font (6x10) and faster scroll; BREAKING burst stays up long enough to read the headline; new layout option (ticker or cards)."
+    },
     {
       "version": "1.0.0",
       "released": "2026-10-28",
@@ -23,6 +38,12 @@
       "notes": "First release: arcade headline screens, single-pass crawl, BREAKING burst, round-robin feeds, feed logos."
     }
   ],
-  "requires": {"python": ">=3.9", "display_size": {"min_width": 64, "min_height": 32}},
+  "requires": {
+    "python": ">=3.9",
+    "display_size": {
+      "min_width": 64,
+      "min_height": 32
+    }
+  },
   "license": "GPL-3.0"
 }

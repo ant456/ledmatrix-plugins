@@ -1,10 +1,12 @@
 """
 News Arcade for LEDMatrix  (arcade style, same family as NBA / NFL / NHL Live).
 
-One headline at a time from your RSS feeds, round-robin so every feed gets turns.
-A long headline rests, crawls to its end once, and rests again, so it is always
-read in full. A new top story from a feed interrupts the rotation with a
-BREAKING burst. A feed that fails keeps showing its last headlines.
+Your RSS headlines as a continuous ticker: every story runs right to left on one
+long strip, round-robin across feeds, so nothing is cut off and several stories
+are always on the way. The logo tile on the left follows the story at the edge.
+(layout "cards" keeps the old one-story-at-a-time screens.) A new top story from a
+feed interrupts with a BREAKING burst that stays up long enough to read it.
+A feed that fails keeps showing its last headlines.
 
 update() does every network call; display() only draws from memory.
 """
@@ -25,6 +27,7 @@ import newsarc_feeds as feeds
 import newsarc_render as render
 
 BURST_SECONDS = 5.0
+MAX_BURST_SECONDS = 14.0
 PALETTE = [(246, 145, 4), (60, 160, 255), (70, 220, 120), (235, 70, 90), (180, 100, 240), (255, 214, 60)]
 
 
@@ -54,7 +57,7 @@ class NewsArcadePlugin(BasePlugin):
 
         here = Path(__file__).resolve().parent
         self.root = here.parent.parent                         # the LEDMatrix folder
-        render.load_faces(str(config.get("title_font", "7x13B")), "9x15B",
+        render.load_faces(str(config.get("title_font", "6x10")), "9x15B",
                           (str(self.root / "assets" / "fonts"), "/home/pi/LEDMatrix/assets/fonts"))
 
         self.session = requests.Session()
@@ -68,6 +71,10 @@ class NewsArcadePlugin(BasePlugin):
 
         self._pos = 0
         self._item_t0 = 0.0
+        self._strip: Optional[render.Strip] = None
+        self._strip_key: Any = None
+        self._scroll = 0.0                                     # ticker position in pixels, kept across turns
+        self._scroll_t: Optional[float] = None
         self._alert: Optional[Dict[str, Any]] = None
         self._last_update = 0.0
         self._worker: Optional[threading.Thread] = None
@@ -89,12 +96,13 @@ class NewsArcadePlugin(BasePlugin):
         self.per_feed = _int(c.get("headlines_per_feed"), 5, 1, 20)
         self.min_seconds = _int(c.get("min_headline_seconds"), 6, 3, 60)
         self.max_seconds = max(self.min_seconds, _int(c.get("max_headline_seconds"), 20, 5, 120))
-        self.speed = float(_int(c.get("crawl_speed"), 36, 10, 120))
+        self.speed = float(_int(c.get("crawl_speed"), 45, 10, 120))
         self.max_age = _int(c.get("max_age_hours"), 48, 1, 24 * 14) * 3600
         self.show_logos = bool(c.get("show_logos", True))
         self.breaking = bool(c.get("breaking_alerts", True))
         self.timeout = float(_int(c.get("request_timeout"), 8, 3, 30))
         self.display_duration = float(_int(c.get("display_duration"), 45, 10, 300))
+        self.view_mode = "cards" if str(c.get("layout", "ticker")).lower() == "cards" else "ticker"
 
     def on_config_change(self, new_config: Dict[str, Any]) -> None:
         super().on_config_change(new_config)
@@ -166,6 +174,30 @@ class NewsArcadePlugin(BasePlugin):
             self.queue = queue
             if self._pos >= len(queue):
                 self._pos = 0
+        self._build_strip()
+
+    def _view_w(self) -> int:
+        return self.W - (render.TILE_W + 2 if self.show_logos else 0)
+
+    def _build_strip(self) -> None:
+        """Lay the queue out as one strip (only when it changed; runs on the update thread)."""
+        with self._lock:
+            queue = list(self.queue)
+        key = (tuple((q["title"], q["feed"]) for q in queue), self._view_w(), id(render.TITLE))
+        if key == self._strip_key:
+            return
+        strip = render.Strip(queue, self._view_w())
+        with self._lock:
+            old = self._strip
+            if old is not None and old.total and strip.total and self._scroll_t is not None:
+                # keep the story now at the left edge there, not the same pixel offset
+                title = old.items[old.index_at(self._scroll)]["title"]
+                at = next((i for i, it in enumerate(strip.items) if it["title"] == title), None)
+                if at is not None:
+                    self._scroll = float(strip.spans[at][0])
+            self._strip, self._strip_key = strip, key
+            if not strip.total:
+                self._scroll = 0.0
 
     # ── helpers ──────────────────────────────────────────────────────────────
 
@@ -200,6 +232,35 @@ class NewsArcadePlugin(BasePlugin):
 
     # ── drawing ──────────────────────────────────────────────────────────────
 
+    def _ticker(self, now: float) -> Image.Image:
+        with self._lock:
+            strip = self._strip
+            if strip is None or not strip.total:
+                return self._fit(render.empty(now, "NO FEEDS" if not self.feeds else "CHECK FEEDS"))
+            last, self._scroll_t = self._scroll_t, now
+            if last is not None and 0 < now - last <= 0.5:     # a long gap (other plugins had the panel) just resumes
+                self._scroll = (self._scroll + (now - last) * self.speed) % strip.total
+            x = self._scroll
+        frame = Image.new("RGB", (self.W, self.H), (0, 0, 0))
+        x0 = 0
+        if self.show_logos:
+            tile = self._tile(strip.items[strip.index_at(x)])
+            if tile is not None:
+                frame.paste(tile, (0, 0))
+                x0 = tile.width + 2
+        frame.paste(strip.window(x), (x0, 0))
+        return self._fit(frame)
+
+    def _jump_to(self, title: str) -> None:
+        """Bring the story with this title to the left edge of the ticker."""
+        with self._lock:
+            strip = self._strip
+            if strip is not None:
+                for i, it in enumerate(strip.items):
+                    if it["title"] == title:
+                        self._scroll = float(strip.spans[i][0])
+                        break
+
     def compose(self, now: Optional[float] = None) -> Image.Image:
         now = time.time() if now is None else now
         with self._lock:
@@ -210,8 +271,11 @@ class NewsArcadePlugin(BasePlugin):
             if alert["pending"]:
                 alert["pending"] = False
                 alert["t0"] = now
-            if now - alert["t0"] < BURST_SECONDS:
-                item = dict(alert["item"], logo=alert["logo"])
+                x0 = render.TILE_W + 2 if self.show_logos else 0
+                need = render.crawl_seconds(alert["item"]["title"], self.W - x0 - 4, self.speed)
+                alert["dur"] = max(BURST_SECONDS, min(MAX_BURST_SECONDS, need + 1.0))
+            if now - alert["t0"] < alert.get("dur", BURST_SECONDS):
+                item = dict(alert["item"], logo=alert["logo"], color=alert["color"])
                 frame = render.breaking(item, alert["color"], self._tile(item), now - alert["t0"], self.speed)
                 return self._fit(frame)
             with self._lock:                                   # burst over: show that story in the rotation
@@ -220,6 +284,11 @@ class NewsArcadePlugin(BasePlugin):
                 if q["title"] == alert["item"]["title"]:
                     self._pos, self._item_t0 = i, now
                     break
+            self._jump_to(alert["item"]["title"])
+            self._scroll_t = None
+
+        if self.view_mode == "ticker":
+            return self._ticker(now)
 
         if not queue:
             return self._fit(render.empty(now, "NO FEEDS" if not self.feeds else "CHECK FEEDS"))
