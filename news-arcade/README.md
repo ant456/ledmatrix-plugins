@@ -51,7 +51,7 @@ Other options (all optional):
 | Option | Default | |
 | --- | --- | --- |
 | `layout` | `ticker` | `ticker` or `cards` |
-| `title_font` | `6x10` | `5x8`, `6x10`, `7x13B`, `8x13B`, `MatrixChunky8`, `3x5`. Smaller faces fit more headlines per lap |
+| `title_font` | `7x13B` | `5x8`, `6x10`, `7x13B`, `8x13B`, `MatrixChunky8`, `3x5`. Smaller faces fit more headlines per lap |
 | `crawl_speed` | 45 | pixels per second |
 | `headlines_per_feed` | 5 | newest stories taken from each feed |
 | `max_age_hours` | 48 | drop older stories |

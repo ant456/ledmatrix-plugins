@@ -106,7 +106,7 @@
     },
     "title_font": {
       "type": "string",
-      "default": "6x10",
+      "default": "7x13B",
       "enum": [
         "5x8",
         "6x10",

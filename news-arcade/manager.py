@@ -57,7 +57,7 @@ class NewsArcadePlugin(BasePlugin):
 
         here = Path(__file__).resolve().parent
         self.root = here.parent.parent                         # the LEDMatrix folder
-        render.load_faces(str(config.get("title_font", "6x10")), "9x15B",
+        render.load_faces(str(config.get("title_font", "7x13B")), "9x15B",
                           (str(self.root / "assets" / "fonts"), "/home/pi/LEDMatrix/assets/fonts"))
 
         self.session = requests.Session()
